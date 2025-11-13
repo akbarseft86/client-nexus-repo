@@ -4,8 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, Plus, Filter } from "lucide-react";
+import { Upload, Plus, Filter, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import * as XLSX from "xlsx";
 import {
   Dialog,
@@ -87,6 +97,8 @@ export default function SH2MData() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -126,6 +138,57 @@ export default function SH2MData() {
     },
     onError: () => {
       toast.error("Gagal mengupdate data");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("sh2m_data")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sh2m-data"] });
+      toast.success("Data berhasil dihapus");
+      setDeleteConfirmId(null);
+    },
+    onError: () => {
+      toast.error("Gagal menghapus data");
+    },
+  });
+
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      // Delete all filtered data or all data if no filter
+      let query = supabase.from("sh2m_data").delete();
+      
+      if (filterDate) {
+        query = query.eq("tanggal", filterDate);
+      }
+      if (filterStatus) {
+        query = query.eq("status_payment", filterStatus);
+      }
+      if (filterEC) {
+        query = query.ilike("nama_ec", `%${filterEC}%`);
+      }
+      
+      // If no filters, delete all
+      if (!filterDate && !filterStatus && !filterEC) {
+        query = query.neq("id", "00000000-0000-0000-0000-000000000000"); // Match all
+      }
+      
+      const { error } = await query;
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sh2m-data"] });
+      toast.success("Semua data berhasil dihapus");
+      setDeleteAllConfirm(false);
+    },
+    onError: () => {
+      toast.error("Gagal menghapus data");
     },
   });
 
@@ -253,6 +316,14 @@ export default function SH2MData() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Data Client Closing Iklan (SH2M)</h1>
         <div className="flex gap-2">
+          <Button
+            variant="destructive"
+            onClick={() => setDeleteAllConfirm(true)}
+            disabled={deleteAllMutation.isPending}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Hapus Semua Data
+          </Button>
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -524,13 +595,22 @@ export default function SH2MData() {
                   </TableCell>
                   <TableCell>{row.keterangan}</TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingRow(editingRow === row.id ? null : row.id)}
-                    >
-                      {editingRow === row.id ? 'Selesai' : 'Edit'}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingRow(editingRow === row.id ? null : row.id)}
+                      >
+                        {editingRow === row.id ? 'Selesai' : 'Edit'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteConfirmId(row.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -538,6 +618,52 @@ export default function SH2MData() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Delete Single Confirmation */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus data ini? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete All Confirmation */}
+      <AlertDialog open={deleteAllConfirm} onOpenChange={setDeleteAllConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi Hapus Semua Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(filterDate || filterStatus || filterEC) ? (
+                <>Apakah Anda yakin ingin menghapus semua data yang sesuai dengan filter saat ini? Data yang akan dihapus: {sh2mData?.length || 0} baris.</>
+              ) : (
+                <>Apakah Anda yakin ingin menghapus SEMUA data? Total data yang akan dihapus: {sh2mData?.length || 0} baris. Tindakan ini tidak dapat dibatalkan!</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteAllMutation.mutate()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Ya, Hapus Semua
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
