@@ -110,6 +110,21 @@ const generateClientId = (tanggal: Date, nama: string, nohp: string, sourceIklan
   return `${day}${month}${year}-${initials}${phoneDigits}-${sourceInitial}`;
 };
 
+// Helpers for date formatting without timezone shifts
+const toYMD = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const formatIdDate = (ymd: string) => {
+  if (!ymd || typeof ymd !== 'string' || !ymd.includes('-')) return ymd as any;
+  const [y, m, d] = ymd.split('-').map((n) => parseInt(n, 10));
+  if (!y || !m || !d) return ymd as any;
+  return new Date(y, m - 1, d).toLocaleDateString('id-ID');
+};
+
 const EC_OPTIONS = ['Farah', 'Intan', 'Rizki', 'Sefhia', 'Yola'];
 
 export default function SH2MData() {
@@ -277,14 +292,14 @@ export default function SH2MData() {
 
         processedData.push({
           client_id: clientId,
-          tanggal: tanggal.toISOString().split('T')[0],
+          tanggal: toYMD(tanggal),
           jam: jam,
           nama_client: nama,
           nohp_client: nohp,
           source_iklan: sourceIklan,
           asal_iklan: asalIklan,
           nama_ec: row.nama_ec || row['Nama EC'] || '',
-          tanggal_update_paid: row.tanggal_update_paid ? new Date(row.tanggal_update_paid).toISOString().split('T')[0] : null,
+          tanggal_update_paid: row.tanggal_update_paid ? toYMD(new Date(row.tanggal_update_paid)) : null,
           keterangan: row.keterangan || row.Keterangan || '',
           status_payment: statusPayment,
         });
@@ -329,7 +344,7 @@ export default function SH2MData() {
     
     const newData = {
       client_id: generateClientId(tanggal, nama, nohp, sourceIklan),
-      tanggal: tanggal.toISOString().split('T')[0],
+      tanggal: toYMD(tanggal),
       jam: formData.get("jam") as string,
       nama_client: nama,
       nohp_client: nohp,
@@ -552,7 +567,7 @@ export default function SH2MData() {
               sh2mData?.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">{row.client_id}</TableCell>
-                  <TableCell>{new Date(row.tanggal).toLocaleDateString('id-ID')}</TableCell>
+                  <TableCell>{formatIdDate(row.tanggal)}</TableCell>
                   <TableCell>
                     {editingRow === row.id ? (
                       <Input
