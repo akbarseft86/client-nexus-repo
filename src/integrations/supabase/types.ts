@@ -14,106 +14,104 @@ export type Database = {
   }
   public: {
     Tables: {
-      clients: {
+      highticket_data: {
         Row: {
-          ad_payment_status: string | null
-          ad_product: string | null
           client_id: string
           created_at: string
-          ec_name: string | null
-          email: string | null
+          harga: number
           id: string
-          name: string
-          paid_description: string | null
-          phone: string
-          purchase_date: string | null
+          keterangan: string | null
+          nama: string
+          nama_ec: string
+          nama_program: string
+          nohp: string
+          pelaksanaan_program: string | null
+          status_payment: string
+          tanggal_sh2m: string | null
+          tanggal_transaksi: string
           updated_at: string
         }
         Insert: {
-          ad_payment_status?: string | null
-          ad_product?: string | null
           client_id: string
           created_at?: string
-          ec_name?: string | null
-          email?: string | null
+          harga: number
           id?: string
-          name: string
-          paid_description?: string | null
-          phone: string
-          purchase_date?: string | null
+          keterangan?: string | null
+          nama: string
+          nama_ec: string
+          nama_program: string
+          nohp: string
+          pelaksanaan_program?: string | null
+          status_payment?: string
+          tanggal_sh2m?: string | null
+          tanggal_transaksi: string
           updated_at?: string
         }
         Update: {
-          ad_payment_status?: string | null
-          ad_product?: string | null
           client_id?: string
           created_at?: string
-          ec_name?: string | null
-          email?: string | null
+          harga?: number
           id?: string
-          name?: string
-          paid_description?: string | null
-          phone?: string
-          purchase_date?: string | null
+          keterangan?: string | null
+          nama?: string
+          nama_ec?: string
+          nama_program?: string
+          nohp?: string
+          pelaksanaan_program?: string | null
+          status_payment?: string
+          tanggal_sh2m?: string | null
+          tanggal_transaksi?: string
           updated_at?: string
         }
         Relationships: []
       }
-      products: {
+      sh2m_data: {
         Row: {
+          asal_iklan: string | null
           client_id: string
-          closing_date: string
           created_at: string
-          customer_name: string
-          customer_phone: string
-          days_to_closing: number | null
-          ec_name: string
           id: string
-          payment_status: string
-          price: number
-          product_name: string
-          unique_code: string
+          keterangan: string | null
+          nama_client: string
+          nama_ec: string | null
+          nohp_client: string
+          source_iklan: string
+          status_payment: string | null
+          tanggal: string
+          tanggal_update_paid: string | null
           updated_at: string
         }
         Insert: {
+          asal_iklan?: string | null
           client_id: string
-          closing_date: string
           created_at?: string
-          customer_name: string
-          customer_phone: string
-          days_to_closing?: number | null
-          ec_name: string
           id?: string
-          payment_status: string
-          price: number
-          product_name: string
-          unique_code: string
+          keterangan?: string | null
+          nama_client: string
+          nama_ec?: string | null
+          nohp_client: string
+          source_iklan: string
+          status_payment?: string | null
+          tanggal: string
+          tanggal_update_paid?: string | null
           updated_at?: string
         }
         Update: {
+          asal_iklan?: string | null
           client_id?: string
-          closing_date?: string
           created_at?: string
-          customer_name?: string
-          customer_phone?: string
-          days_to_closing?: number | null
-          ec_name?: string
           id?: string
-          payment_status?: string
-          price?: number
-          product_name?: string
-          unique_code?: string
+          keterangan?: string | null
+          nama_client?: string
+          nama_ec?: string | null
+          nohp_client?: string
+          source_iklan?: string
+          status_payment?: string | null
+          tanggal?: string
+          tanggal_update_paid?: string | null
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "products_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
