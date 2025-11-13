@@ -221,9 +221,9 @@ export default function SH2MData() {
     try {
       const data = await file.arrayBuffer();
       // Handle CSV with custom delimiter (semicolon)
-      const workbook = XLSX.read(data, { FS: ";" });
+      const workbook = XLSX.read(data, { type: 'array', FS: ';' });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
 
       const processedData: any[] = [];
       const skippedDuplicates: string[] = [];
