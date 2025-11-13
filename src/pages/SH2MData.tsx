@@ -41,32 +41,54 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 
-// Parse date from common formats like "12/11/25 01.30" or "12/11/2025 01:30"
+// Parse date from various formats:
+// ISO: "2025-11-12 01:30:05" or "2025-11-12 01:30"
+// Indonesian: "12/11/25 01.30" or "12/11/2025 01:30"
 const parseDateTimeFromCSV = (input: any) => {
   if (input == null) return { date: null as Date | null, time: '' };
   const str = String(input).trim();
   if (!str) return { date: null as Date | null, time: '' };
 
-  // Match: DD/MM/YY(YY) [space] HH.mm or HH:mm
-  const regex = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})(?:\s+(\d{1,2})[:.](\d{2}))?$/;
-  const m = str.match(regex);
-  if (!m) return { date: null as Date | null, time: '' };
-
-  const day = parseInt(m[1], 10);
-  const month = parseInt(m[2], 10);
-  let year = parseInt(m[3], 10);
-  if (year < 100) year += 2000; // 25 -> 2025
-
-  const date = new Date(year, month - 1, day);
-
-  let time = '';
-  if (m[4] != null && m[5] != null) {
-    const hh = String(parseInt(m[4], 10)).padStart(2, '0');
-    const mm = String(parseInt(m[5], 10)).padStart(2, '0');
-    time = `${hh}.${mm}`; // normalize to HH.mm
+  // Try ISO format first: YYYY-MM-DD HH:MM:SS or YYYY-MM-DD HH:MM
+  const isoRegex = /^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})(?::\d{2})?$/;
+  const isoMatch = str.match(isoRegex);
+  
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10);
+    const day = parseInt(isoMatch[3], 10);
+    const hour = parseInt(isoMatch[4], 10);
+    const minute = parseInt(isoMatch[5], 10);
+    
+    const date = new Date(year, month - 1, day);
+    const time = `${String(hour).padStart(2, '0')}.${String(minute).padStart(2, '0')}`;
+    
+    return { date, time };
   }
 
-  return { date, time };
+  // Try Indonesian format: DD/MM/YY(YY) HH.mm or HH:mm
+  const indoRegex = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})(?:\s+(\d{1,2})[:.](\d{2}))?$/;
+  const indoMatch = str.match(indoRegex);
+  
+  if (indoMatch) {
+    const day = parseInt(indoMatch[1], 10);
+    const month = parseInt(indoMatch[2], 10);
+    let year = parseInt(indoMatch[3], 10);
+    if (year < 100) year += 2000; // 25 -> 2025
+
+    const date = new Date(year, month - 1, day);
+
+    let time = '';
+    if (indoMatch[4] != null && indoMatch[5] != null) {
+      const hh = String(parseInt(indoMatch[4], 10)).padStart(2, '0');
+      const mm = String(parseInt(indoMatch[5], 10)).padStart(2, '0');
+      time = `${hh}.${mm}`;
+    }
+
+    return { date, time };
+  }
+
+  return { date: null as Date | null, time: '' };
 };
 
 // Generate client ID: DDMMYYYY-IIIII-S
