@@ -110,10 +110,13 @@ export default function SH2MData() {
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
       const processedData = jsonData.map((row: any) => {
-        const tanggal = new Date(row.tanggal || row.Tanggal || new Date());
-        const nama = row.nama_client || row['Nama Client'] || '';
-        const nohp = String(row.nohp_client || row['NoHP Client'] || '');
-        const sourceIklan = row.source_iklan || row['Source Iklan'] || '';
+        // Map CSV columns to database fields
+        const tanggal = new Date(row.draft_time || row.tanggal || row.Tanggal || new Date());
+        const nama = row.name || row.nama_client || row['Nama Client'] || '';
+        const nohp = String(row.phone || row.nohp_client || row['NoHP Client'] || '');
+        const sourceIklan = row.page || row.source_iklan || row['Source Iklan'] || '';
+        const asalIklan = row.store || row.asal_iklan || row['Asal Iklan'] || '';
+        const statusPayment = row.payment_status || row.status_payment || row['Status Payment'] || 'unpaid';
         
         return {
           client_id: generateClientId(tanggal, nama, nohp, sourceIklan),
@@ -121,11 +124,11 @@ export default function SH2MData() {
           nama_client: nama,
           nohp_client: nohp,
           source_iklan: sourceIklan,
-          asal_iklan: row.asal_iklan || row['Asal Iklan'] || '',
+          asal_iklan: asalIklan,
           nama_ec: row.nama_ec || row['Nama EC'] || '',
           tanggal_update_paid: row.tanggal_update_paid ? new Date(row.tanggal_update_paid).toISOString().split('T')[0] : null,
           keterangan: row.keterangan || row.Keterangan || '',
-          status_payment: row.status_payment || row['Status Payment'] || 'unpaid',
+          status_payment: statusPayment,
         };
       });
 
