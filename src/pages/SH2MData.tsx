@@ -105,21 +105,53 @@ export default function SH2MData() {
 
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
+      // Handle CSV with custom delimiter (semicolon)
+      const workbook = XLSX.read(data, { FS: ";" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-      const processedData = jsonData.map((row: any) => {
+      const processedData: any[] = [];
+      const skippedDuplicates: string[] = [];
+
+      for (const row of jsonData as any[]) {
         // Map CSV columns to database fields
-        const tanggal = new Date(row.draft_time || row.tanggal || row.Tanggal || new Date());
+        const draftTime = row.draft_time || row.tanggal || row.Tanggal;
+        const tanggal = draftTime ? new Date(draftTime) : new Date();
+        
+        // Validate date
+        if (isNaN(tanggal.getTime())) {
+          console.warn('Invalid date for row:', row);
+          continue;
+        }
+
         const nama = row.name || row.nama_client || row['Nama Client'] || '';
         const nohp = String(row.phone || row.nohp_client || row['NoHP Client'] || '');
         const sourceIklan = row.page || row.source_iklan || row['Source Iklan'] || '';
         const asalIklan = row.store || row.asal_iklan || row['Asal Iklan'] || '';
         const statusPayment = row.payment_status || row.status_payment || row['Status Payment'] || 'unpaid';
         
-        return {
-          client_id: generateClientId(tanggal, nama, nohp, sourceIklan),
+        const clientId = generateClientId(tanggal, nama, nohp, sourceIklan);
+        
+        // Check for duplicates in current batch
+        if (processedData.some(d => d.client_id === clientId)) {
+          skippedDuplicates.push(clientId);
+          continue;
+        }
+
+        // Check if client_id already exists in database
+        const { data: existing } = await supabase
+          .from("sh2m_data")
+          .select("client_id")
+          .eq("client_id", clientId)
+          .maybeSingle();
+
+        if (existing) {
+          skippedDuplicates.push(clientId);
+          continue;
+        }
+
+        processedData.push({
+          client_id: clientId,
           tanggal: tanggal.toISOString().split('T')[0],
           nama_client: nama,
           nohp_client: nohp,
@@ -129,14 +161,23 @@ export default function SH2MData() {
           tanggal_update_paid: row.tanggal_update_paid ? new Date(row.tanggal_update_paid).toISOString().split('T')[0] : null,
           keterangan: row.keterangan || row.Keterangan || '',
           status_payment: statusPayment,
-        };
-      });
+        });
+      }
+
+      if (processedData.length === 0) {
+        toast.error("Tidak ada data baru untuk diupload");
+        return;
+      }
 
       const { error } = await supabase.from("sh2m_data").insert(processedData);
       
       if (error) throw error;
       
-      toast.success(`${processedData.length} data berhasil diupload`);
+      const message = skippedDuplicates.length > 0
+        ? `${processedData.length} data berhasil diupload, ${skippedDuplicates.length} duplikat dilewati`
+        : `${processedData.length} data berhasil diupload`;
+      
+      toast.success(message);
       queryClient.invalidateQueries({ queryKey: ["sh2m-data"] });
       setUploadDialogOpen(false);
     } catch (error) {
