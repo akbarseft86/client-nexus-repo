@@ -31,21 +31,32 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 
-// Parse date from format: DD/MM/YY HH.mm
-const parseDateTimeFromCSV = (dateTimeStr: string) => {
-  if (!dateTimeStr) return { date: new Date(), time: '' };
-  
-  // Format: "12/11/25 01.30" = DD/MM/YY HH.mm
-  const parts = dateTimeStr.trim().split(' ');
-  const datePart = parts[0];
-  const timePart = parts[1] || '';
-  
-  const [day, month, year] = datePart.split('/').map(Number);
-  // Convert 2-digit year to 4-digit (25 -> 2025)
-  const fullYear = year < 100 ? 2000 + year : year;
-  
-  const date = new Date(fullYear, month - 1, day);
-  return { date, time: timePart };
+// Parse date from common formats like "12/11/25 01.30" or "12/11/2025 01:30"
+const parseDateTimeFromCSV = (input: any) => {
+  if (input == null) return { date: null as Date | null, time: '' };
+  const str = String(input).trim();
+  if (!str) return { date: null as Date | null, time: '' };
+
+  // Match: DD/MM/YY(YY) [space] HH.mm or HH:mm
+  const regex = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})(?:\s+(\d{1,2})[:.](\d{2}))?$/;
+  const m = str.match(regex);
+  if (!m) return { date: null as Date | null, time: '' };
+
+  const day = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  let year = parseInt(m[3], 10);
+  if (year < 100) year += 2000; // 25 -> 2025
+
+  const date = new Date(year, month - 1, day);
+
+  let time = '';
+  if (m[4] != null && m[5] != null) {
+    const hh = String(parseInt(m[4], 10)).padStart(2, '0');
+    const mm = String(parseInt(m[5], 10)).padStart(2, '0');
+    time = `${hh}.${mm}`; // normalize to HH.mm
+  }
+
+  return { date, time };
 };
 
 // Generate client ID: DDMMYYYY-IIIII-S
@@ -138,7 +149,7 @@ export default function SH2MData() {
         const { date: tanggal, time: jam } = parseDateTimeFromCSV(draftTime);
         
         // Validate date
-        if (isNaN(tanggal.getTime())) {
+        if (!tanggal || isNaN(tanggal.getTime())) {
           console.warn('Invalid date for row:', row);
           continue;
         }
