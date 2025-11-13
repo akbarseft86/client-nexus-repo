@@ -71,6 +71,7 @@ export type Database = {
           client_id: string
           created_at: string
           id: string
+          jam: string | null
           keterangan: string | null
           nama_client: string
           nama_ec: string | null
@@ -86,6 +87,7 @@ export type Database = {
           client_id: string
           created_at?: string
           id?: string
+          jam?: string | null
           keterangan?: string | null
           nama_client: string
           nama_ec?: string | null
@@ -101,6 +103,7 @@ export type Database = {
           client_id?: string
           created_at?: string
           id?: string
+          jam?: string | null
           keterangan?: string | null
           nama_client?: string
           nama_ec?: string | null

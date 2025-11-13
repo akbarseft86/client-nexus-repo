@@ -31,6 +31,23 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 
+// Parse date from format: DD/MM/YY HH.mm
+const parseDateTimeFromCSV = (dateTimeStr: string) => {
+  if (!dateTimeStr) return { date: new Date(), time: '' };
+  
+  // Format: "12/11/25 01.30" = DD/MM/YY HH.mm
+  const parts = dateTimeStr.trim().split(' ');
+  const datePart = parts[0];
+  const timePart = parts[1] || '';
+  
+  const [day, month, year] = datePart.split('/').map(Number);
+  // Convert 2-digit year to 4-digit (25 -> 2025)
+  const fullYear = year < 100 ? 2000 + year : year;
+  
+  const date = new Date(fullYear, month - 1, day);
+  return { date, time: timePart };
+};
+
 // Generate client ID: DDMMYYYY-IIIII-S
 const generateClientId = (tanggal: Date, nama: string, nohp: string, sourceIklan: string) => {
   const day = String(tanggal.getDate()).padStart(2, '0');
@@ -49,6 +66,8 @@ const generateClientId = (tanggal: Date, nama: string, nohp: string, sourceIklan
   
   return `${day}${month}${year}-${initials}${phoneDigits}-${sourceInitial}`;
 };
+
+const EC_OPTIONS = ['Farah', 'Intan', 'Rizki', 'Sefhia', 'Yola'];
 
 export default function SH2MData() {
   const [filterDate, setFilterDate] = useState("");
@@ -116,7 +135,7 @@ export default function SH2MData() {
       for (const row of jsonData as any[]) {
         // Map CSV columns to database fields
         const draftTime = row.draft_time || row.tanggal || row.Tanggal;
-        const tanggal = draftTime ? new Date(draftTime) : new Date();
+        const { date: tanggal, time: jam } = parseDateTimeFromCSV(draftTime);
         
         // Validate date
         if (isNaN(tanggal.getTime())) {
@@ -153,6 +172,7 @@ export default function SH2MData() {
         processedData.push({
           client_id: clientId,
           tanggal: tanggal.toISOString().split('T')[0],
+          jam: jam,
           nama_client: nama,
           nohp_client: nohp,
           source_iklan: sourceIklan,
@@ -195,6 +215,7 @@ export default function SH2MData() {
     const newData = {
       client_id: generateClientId(tanggal, nama, nohp, sourceIklan),
       tanggal: tanggal.toISOString().split('T')[0],
+      jam: formData.get("jam") as string,
       nama_client: nama,
       nohp_client: nohp,
       source_iklan: sourceIklan,
@@ -270,6 +291,10 @@ export default function SH2MData() {
                     <Input id="tanggal" name="tanggal" type="date" required />
                   </div>
                   <div>
+                    <Label htmlFor="jam">Jam</Label>
+                    <Input id="jam" name="jam" placeholder="HH.mm" />
+                  </div>
+                  <div>
                     <Label htmlFor="nama_client">Nama Client</Label>
                     <Input id="nama_client" name="nama_client" required />
                   </div>
@@ -287,7 +312,16 @@ export default function SH2MData() {
                   </div>
                   <div>
                     <Label htmlFor="nama_ec">Nama EC</Label>
-                    <Input id="nama_ec" name="nama_ec" />
+                    <Select name="nama_ec">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih EC" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EC_OPTIONS.map((ec) => (
+                          <SelectItem key={ec} value={ec}>{ec}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label htmlFor="status_payment">Status Payment</Label>
@@ -370,6 +404,7 @@ export default function SH2MData() {
             <TableRow>
               <TableHead>Client ID</TableHead>
               <TableHead>Tanggal</TableHead>
+              <TableHead>Jam</TableHead>
               <TableHead>Nama Client</TableHead>
               <TableHead>No HP</TableHead>
               <TableHead>Source Iklan</TableHead>
@@ -384,32 +419,55 @@ export default function SH2MData() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={12} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : sh2mData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={12} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               sh2mData?.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">{row.client_id}</TableCell>
                   <TableCell>{new Date(row.tanggal).toLocaleDateString('id-ID')}</TableCell>
+                  <TableCell>
+                    {editingRow === row.id ? (
+                      <Input
+                        defaultValue={row.jam || ''}
+                        placeholder="HH.mm"
+                        onBlur={(e) => updateMutation.mutate({
+                          id: row.id,
+                          updates: { jam: e.target.value }
+                        })}
+                      />
+                    ) : (
+                      row.jam || '-'
+                    )}
+                  </TableCell>
                   <TableCell>{row.nama_client}</TableCell>
                   <TableCell>{row.nohp_client}</TableCell>
                   <TableCell>{row.source_iklan}</TableCell>
                   <TableCell>{row.asal_iklan}</TableCell>
                   <TableCell>
                     {editingRow === row.id ? (
-                      <Input
+                      <Select
                         defaultValue={row.nama_ec || ''}
-                        onBlur={(e) => updateMutation.mutate({
+                        onValueChange={(value) => updateMutation.mutate({
                           id: row.id,
-                          updates: { nama_ec: e.target.value }
+                          updates: { nama_ec: value }
                         })}
-                      />
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pilih EC" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {EC_OPTIONS.map((ec) => (
+                            <SelectItem key={ec} value={ec}>{ec}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
-                      row.nama_ec
+                      row.nama_ec || '-'
                     )}
                   </TableCell>
                   <TableCell>
