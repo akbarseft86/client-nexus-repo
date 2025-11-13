@@ -227,6 +227,7 @@ export default function SH2MData() {
 
       const processedData: any[] = [];
       const skippedDuplicates: string[] = [];
+      const parsingErrors: string[] = [];
 
       for (const row of jsonData as any[]) {
         // Map CSV columns to database fields
@@ -235,7 +236,8 @@ export default function SH2MData() {
         
         // Validate date
         if (!tanggal || isNaN(tanggal.getTime())) {
-          console.warn('Invalid date for row:', row);
+          console.warn('Invalid date for row:', { draftTime, row: row.name || row.order_id });
+          parsingErrors.push(`Baris "${row.name || row.order_id}": tanggal "${draftTime}" tidak valid`);
           continue;
         }
 
@@ -246,6 +248,14 @@ export default function SH2MData() {
         const statusPayment = row.payment_status || row.status_payment || row['Status Payment'] || 'unpaid';
         
         const clientId = generateClientId(tanggal, nama, nohp, sourceIklan);
+        
+        console.log('Processing:', { 
+          nama, 
+          draftTime, 
+          parsedDate: tanggal.toISOString().split('T')[0],
+          parsedTime: jam,
+          clientId 
+        });
         
         // Check for duplicates in current batch
         if (processedData.some(d => d.client_id === clientId)) {
@@ -280,8 +290,17 @@ export default function SH2MData() {
         });
       }
 
+      if (parsingErrors.length > 0) {
+        console.error('Parsing errors:', parsingErrors);
+        toast.error(`Gagal parsing ${parsingErrors.length} baris. Check console untuk detail.`);
+      }
+
       if (processedData.length === 0) {
-        toast.error("Tidak ada data baru untuk diupload");
+        const message = skippedDuplicates.length > 0
+          ? `Semua ${skippedDuplicates.length} data adalah duplikat. Upload file yang berbeda atau hapus data lama terlebih dahulu.`
+          : "Tidak ada data valid untuk diupload. Pastikan format tanggal benar.";
+        toast.error(message);
+        console.log('Skipped duplicates:', skippedDuplicates);
         return;
       }
 
