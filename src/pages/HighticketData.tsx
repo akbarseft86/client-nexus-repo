@@ -205,13 +205,16 @@ export default function HighticketData() {
                   </div>
                   <div>
                     <Label htmlFor="status_payment">Status Payment</Label>
-                    <Select name="status_payment" defaultValue="unpaid" required>
+                    <Select name="status_payment" defaultValue="Lunas" required>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="paid">Paid</SelectItem>
-                        <SelectItem value="unpaid">Unpaid</SelectItem>
+                        <SelectItem value="Lunas">Lunas</SelectItem>
+                        <SelectItem value="DP">DP</SelectItem>
+                        <SelectItem value="Angsuran">Angsuran</SelectItem>
+                        <SelectItem value="Pelunasan">Pelunasan</SelectItem>
+                        <SelectItem value="Bonus">Bonus</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -278,9 +281,13 @@ export default function HighticketData() {
                   <TableCell>Rp {row.harga.toLocaleString('id-ID')}</TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 rounded text-xs ${
-                      row.status_payment === 'paid' 
+                      row.status_payment === 'Lunas' 
                         ? 'bg-success/10 text-success' 
-                        : 'bg-warning/10 text-warning'
+                        : row.status_payment === 'DP' || row.status_payment === 'Angsuran'
+                        ? 'bg-warning/10 text-warning'
+                        : row.status_payment === 'Pelunasan'
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-muted text-muted-foreground'
                     }`}>
                       {row.status_payment}
                     </span>
