@@ -136,6 +136,7 @@ export default function SH2MData() {
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
+  const [normalizeConfirm, setNormalizeConfirm] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -228,6 +229,78 @@ export default function SH2MData() {
     },
     onError: () => {
       toast.error("Gagal menghapus data");
+    },
+  });
+
+  const normalizePhoneNumber = (phone: string): string => {
+    let normalized = String(phone).trim();
+    
+    // Convert scientific notation to full number
+    if (normalized.includes('E') || normalized.includes('e')) {
+      const num = parseFloat(normalized);
+      if (!isNaN(num)) {
+        normalized = num.toFixed(0);
+      }
+    }
+    
+    // Remove any non-digit characters except leading +
+    normalized = normalized.replace(/[^\d+]/g, '');
+    
+    return normalized;
+  };
+
+  const normalizeAllPhonesMutation = useMutation({
+    mutationFn: async () => {
+      // Fetch all data
+      const { data: allData, error: fetchError } = await supabase
+        .from("sh2m_data")
+        .select("*");
+      
+      if (fetchError) throw fetchError;
+      if (!allData || allData.length === 0) {
+        throw new Error("Tidak ada data untuk dinormalisasi");
+      }
+
+      let updatedCount = 0;
+      const errors: string[] = [];
+
+      // Process each row
+      for (const row of allData) {
+        const normalizedPhone = normalizePhoneNumber(row.nohp_client);
+        
+        // Only update if phone number changed
+        if (normalizedPhone !== row.nohp_client) {
+          const { error: updateError } = await supabase
+            .from("sh2m_data")
+            .update({ nohp_client: normalizedPhone })
+            .eq("id", row.id);
+          
+          if (updateError) {
+            errors.push(`Error updating ${row.client_id}: ${updateError.message}`);
+          } else {
+            updatedCount++;
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        console.error("Normalization errors:", errors);
+      }
+
+      return { updatedCount, totalRows: allData.length, errors };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["sh2m-data"] });
+      if (result.updatedCount > 0) {
+        toast.success(`${result.updatedCount} nomor HP berhasil dinormalisasi dari ${result.totalRows} data`);
+      } else {
+        toast.info("Semua nomor HP sudah dalam format yang benar");
+      }
+      setNormalizeConfirm(false);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Gagal normalisasi nomor HP");
+      setNormalizeConfirm(false);
     },
   });
 
@@ -386,6 +459,13 @@ export default function SH2MData() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Data Client Closing Iklan (SH2M)</h1>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setNormalizeConfirm(true)}
+            disabled={normalizeAllPhonesMutation.isPending}
+          >
+            Normalisasi No HP
+          </Button>
           <Button
             variant="destructive"
             onClick={() => setDeleteAllConfirm(true)}
@@ -730,6 +810,29 @@ export default function SH2MData() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Ya, Hapus Semua
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Normalize Phone Numbers Confirmation */}
+      <AlertDialog open={normalizeConfirm} onOpenChange={setNormalizeConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi Normalisasi Nomor HP</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menormalisasi semua nomor HP di database? 
+              Proses ini akan mengubah format nomor HP yang menggunakan scientific notation (contoh: 6.28524E+12) 
+              menjadi format lengkap (628524...). Total data: {sh2mData?.length || 0} baris.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => normalizeAllPhonesMutation.mutate()}
+              disabled={normalizeAllPhonesMutation.isPending}
+            >
+              {normalizeAllPhonesMutation.isPending ? "Memproses..." : "Ya, Normalisasi"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
