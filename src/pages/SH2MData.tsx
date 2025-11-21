@@ -142,7 +142,9 @@ export default function SH2MData() {
   const { data: sh2mData, isLoading } = useQuery({
     queryKey: ["sh2m-data", filterDate, filterStatus, filterEC],
     queryFn: async () => {
-      let query = supabase.from("sh2m_data").select("*").order("tanggal", { ascending: false });
+      let query = supabase.from("sh2m_data").select("*")
+        .order("tanggal", { ascending: false })
+        .order("jam", { ascending: false });
       
       if (filterDate) {
         query = query.eq("tanggal", filterDate);
@@ -257,7 +259,19 @@ export default function SH2MData() {
         }
 
         const nama = row.name || row.nama_client || row['Nama Client'] || '';
-        const nohp = String(row.phone || row.nohp_client || row['NoHP Client'] || '');
+        
+        // Parse phone number and convert scientific notation to full number
+        let nohp = String(row.phone || row.nohp_client || row['NoHP Client'] || '').trim();
+        // If scientific notation detected (e.g., "6.28524E+12"), convert it
+        if (nohp.includes('E') || nohp.includes('e')) {
+          const num = parseFloat(nohp);
+          if (!isNaN(num)) {
+            nohp = num.toFixed(0); // Convert to full integer string
+          }
+        }
+        // Remove any non-digit characters except leading +
+        nohp = nohp.replace(/[^\d+]/g, '');
+        
         const sourceIklan = row.page || row.source_iklan || row['Source Iklan'] || '';
         const asalIklan = row.store || row.asal_iklan || row['Asal Iklan'] || '';
         const statusPayment = row.payment_status || row.status_payment || row['Status Payment'] || 'unpaid';
