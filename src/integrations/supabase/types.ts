@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       highticket_data: {
         Row: {
+          category: string
           client_id: string
           created_at: string
           harga: number
@@ -32,6 +33,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          category?: string
           client_id: string
           created_at?: string
           harga: number
@@ -48,6 +50,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          category?: string
           client_id?: string
           created_at?: string
           harga?: number
