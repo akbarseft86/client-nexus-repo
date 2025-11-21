@@ -87,6 +87,7 @@ export default function HighticketData() {
         client_id: formData.get("client_id") as string,
         nama: formData.get("nama") as string,
         nohp: formData.get("nohp") as string,
+        category: formData.get("category") as string,
         nama_program: formData.get("nama_program") as string,
         harga: parseFloat(formData.get("harga") as string),
         status_payment: formData.get("status_payment") as string,
@@ -196,6 +197,18 @@ export default function HighticketData() {
                     />
                   </div>
                   <div>
+                    <Label htmlFor="category">Category</Label>
+                    <Select name="category" defaultValue="Program" required>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Program">Program</SelectItem>
+                        <SelectItem value="Merchandise">Merchandise</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
                     <Label htmlFor="nama_program">Nama Program</Label>
                     <Input id="nama_program" name="nama_program" required />
                   </div>
@@ -252,6 +265,7 @@ export default function HighticketData() {
               <TableHead>Client ID</TableHead>
               <TableHead>Nama</TableHead>
               <TableHead>No HP</TableHead>
+              <TableHead>Category</TableHead>
               <TableHead>Nama Program</TableHead>
               <TableHead>Harga</TableHead>
               <TableHead>Status Payment</TableHead>
@@ -264,11 +278,11 @@ export default function HighticketData() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={12} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : highticketData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={12} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               highticketData?.map((row) => (
@@ -277,6 +291,15 @@ export default function HighticketData() {
                   <TableCell className="font-medium">{row.client_id}</TableCell>
                   <TableCell>{row.nama}</TableCell>
                   <TableCell>{row.nohp}</TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      row.category === 'Program' 
+                        ? 'bg-primary/10 text-primary' 
+                        : 'bg-accent/10 text-accent'
+                    }`}>
+                      {row.category}
+                    </span>
+                  </TableCell>
                   <TableCell>{row.nama_program}</TableCell>
                   <TableCell>Rp {row.harga.toLocaleString('id-ID')}</TableCell>
                   <TableCell>
