@@ -63,15 +63,28 @@ export default function HighticketData() {
     },
   });
 
-  const searchClient = async (clientId: string) => {
-    const { data, error } = await supabase
+  const searchClient = async (searchTerm: string) => {
+    // Try to search by client_id first
+    let { data, error } = await supabase
       .from("sh2m_data")
       .select("*")
-      .eq("client_id", clientId)
-      .single();
+      .eq("client_id", searchTerm)
+      .maybeSingle();
     
-    if (error) {
-      toast.error("Client ID tidak ditemukan");
+    // If not found, try searching by phone number
+    if (!data && searchTerm) {
+      const { data: phoneData, error: phoneError } = await supabase
+        .from("sh2m_data")
+        .select("*")
+        .eq("nohp_client", searchTerm)
+        .maybeSingle();
+      
+      data = phoneData;
+      error = phoneError;
+    }
+    
+    if (error || !data) {
+      toast.error("Client tidak ditemukan");
       setSelectedClient(null);
       return;
     }
@@ -131,10 +144,10 @@ export default function HighticketData() {
             <div className="space-y-4">
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <Label htmlFor="search-client">Cari Client ID</Label>
+                  <Label htmlFor="search-client">Cari Client ID atau No HP</Label>
                   <Input
                     id="search-client"
-                    placeholder="Masukkan Client ID"
+                    placeholder="Masukkan Client ID atau No HP"
                     value={searchClientId}
                     onChange={(e) => setSearchClientId(e.target.value)}
                   />
