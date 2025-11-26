@@ -119,6 +119,30 @@ export type Database = {
         }
         Relationships: []
       }
+      source_iklan_categories: {
+        Row: {
+          created_at: string
+          id: string
+          kategori: string | null
+          source_iklan: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kategori?: string | null
+          source_iklan: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kategori?: string | null
+          source_iklan?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

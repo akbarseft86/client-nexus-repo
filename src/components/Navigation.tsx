@@ -1,5 +1,5 @@
 import { NavLink } from "@/components/NavLink";
-import { Database, FileText, Search } from "lucide-react";
+import { Database, FileText, Search, Tags } from "lucide-react";
 
 export default function Navigation() {
   return (
@@ -31,6 +31,14 @@ export default function Navigation() {
             >
               <Search className="h-4 w-4" />
               Pencarian Client
+            </NavLink>
+            <NavLink
+              to="/source-categories"
+              className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              activeClassName="bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+            >
+              <Tags className="h-4 w-4" />
+              Kategori Source Iklan
             </NavLink>
           </div>
         </div>
