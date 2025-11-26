@@ -143,6 +143,7 @@ export default function SH2MData() {
   const { data: sh2mData, isLoading } = useQuery({
     queryKey: ["sh2m-data", filterDate, filterStatus, filterEC],
     queryFn: async () => {
+      // Fetch SH2M data
       let query = supabase.from("sh2m_data").select("*")
         .order("tanggal", { ascending: false })
         .order("jam", { ascending: false });
@@ -157,9 +158,26 @@ export default function SH2MData() {
         query = query.ilike("nama_ec", `%${filterEC}%`);
       }
       
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      const { data: sh2mRows, error: sh2mError } = await query;
+      if (sh2mError) throw sh2mError;
+      
+      // Fetch categories
+      const { data: categories, error: catError } = await supabase
+        .from("source_iklan_categories")
+        .select("source_iklan, kategori");
+      
+      if (catError) throw catError;
+      
+      // Create a map of source_iklan to kategori
+      const categoryMap = new Map(
+        categories?.map(cat => [cat.source_iklan, cat.kategori]) || []
+      );
+      
+      // Merge data
+      return sh2mRows?.map(row => ({
+        ...row,
+        kategori: categoryMap.get(row.source_iklan) || '-'
+      }));
     },
   });
 
@@ -640,6 +658,7 @@ export default function SH2MData() {
               <TableHead>Nama Client</TableHead>
               <TableHead>No HP</TableHead>
               <TableHead>Source Iklan</TableHead>
+              <TableHead>Kategori</TableHead>
               <TableHead>Asal Iklan</TableHead>
               <TableHead>Nama EC</TableHead>
               <TableHead>Status Payment</TableHead>
@@ -651,11 +670,11 @@ export default function SH2MData() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={13} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : sh2mData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={13} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               sh2mData?.map((row) => (
@@ -679,6 +698,7 @@ export default function SH2MData() {
                   <TableCell>{row.nama_client}</TableCell>
                   <TableCell>{row.nohp_client}</TableCell>
                   <TableCell>{row.source_iklan}</TableCell>
+                  <TableCell>{row.kategori}</TableCell>
                   <TableCell>{row.asal_iklan}</TableCell>
                   <TableCell>
                     {editingRow === row.id ? (
