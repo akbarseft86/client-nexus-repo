@@ -4,8 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +44,7 @@ export default function HighticketData() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchClientId, setSearchClientId] = useState("");
   const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
 
@@ -122,6 +133,26 @@ export default function HighticketData() {
     },
     onError: () => {
       toast.error("Gagal menambahkan data");
+    },
+  });
+
+  const deleteDataMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("highticket_data")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["highticket-data"] });
+      toast.success("Data berhasil dihapus");
+      setDeleteConfirmId(null);
+    },
+    onError: () => {
+      toast.error("Gagal menghapus data");
+      setDeleteConfirmId(null);
     },
   });
 
@@ -286,16 +317,17 @@ export default function HighticketData() {
               <TableHead>Tanggal SH2M</TableHead>
               <TableHead>Pelaksanaan Program</TableHead>
               <TableHead>Keterangan</TableHead>
+              <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={13} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : highticketData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={13} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               highticketData?.map((row) => (
@@ -334,12 +366,42 @@ export default function HighticketData() {
                   </TableCell>
                   <TableCell>{row.pelaksanaan_program}</TableCell>
                   <TableCell>{row.keterangan}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteConfirmId(row.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi Hapus</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus data ini? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteConfirmId && deleteDataMutation.mutate(deleteConfirmId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
