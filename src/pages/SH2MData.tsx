@@ -404,7 +404,7 @@ export default function SH2MData() {
           source_iklan: sourceIklan,
           asal_iklan: asalIklan,
           nama_ec: row.nama_ec || row['Nama EC'] || '',
-          tanggal_update_paid: row.tanggal_update_paid ? toYMD(new Date(row.tanggal_update_paid)) : null,
+          tanggal_share: row.tanggal_share ? toYMD(new Date(row.tanggal_share)) : null,
           keterangan: row.keterangan || row.Keterangan || '',
           status_payment: statusPayment,
         });
@@ -662,7 +662,7 @@ export default function SH2MData() {
               <TableHead>Asal Iklan</TableHead>
               <TableHead>Nama EC</TableHead>
               <TableHead>Status Payment</TableHead>
-              <TableHead>Tanggal Update</TableHead>
+              <TableHead>Tanggal Share</TableHead>
               <TableHead>Keterangan</TableHead>
               <TableHead>Aksi</TableHead>
             </TableRow>
@@ -753,14 +753,14 @@ export default function SH2MData() {
                     {editingRow === row.id ? (
                       <Input
                         type="date"
-                        defaultValue={row.tanggal_update_paid || ''}
+                        defaultValue={row.tanggal_share || ''}
                         onBlur={(e) => updateMutation.mutate({
                           id: row.id,
-                          updates: { tanggal_update_paid: e.target.value }
+                          updates: { tanggal_share: e.target.value }
                         })}
                       />
                     ) : (
-                      row.tanggal_update_paid ? new Date(row.tanggal_update_paid).toLocaleDateString('id-ID') : '-'
+                      row.tanggal_share ? new Date(row.tanggal_share).toLocaleDateString('id-ID') : '-'
                     )}
                   </TableCell>
                   <TableCell>{row.keterangan}</TableCell>

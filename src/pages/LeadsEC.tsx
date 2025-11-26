@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
@@ -9,8 +9,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { format } from "date-fns";
+import { useState } from "react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const LeadsEC = () => {
+  const queryClient = useQueryClient();
+  const [editingRow, setEditingRow] = useState<string | null>(null);
+  const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
+
   const { data: leadsData, isLoading } = useQuery({
     queryKey: ["leads-ec"],
     queryFn: async () => {
@@ -44,6 +55,27 @@ const LeadsEC = () => {
     },
   });
 
+  const handleDateChange = async (rowId: string, newDate: Date | undefined) => {
+    if (!newDate) return;
+    
+    try {
+      const { error } = await supabase
+        .from("sh2m_data")
+        .update({ tanggal_share: format(newDate, "yyyy-MM-dd") })
+        .eq("id", rowId);
+
+      if (error) throw error;
+
+      toast.success("Tanggal Share berhasil diupdate");
+      queryClient.invalidateQueries({ queryKey: ["leads-ec"] });
+      setEditingRow(null);
+      setEditingDate(undefined);
+    } catch (error) {
+      console.error("Error updating tanggal share:", error);
+      toast.error("Gagal mengupdate tanggal share");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -64,7 +96,7 @@ const LeadsEC = () => {
               <TableHead>Kategori</TableHead>
               <TableHead>Asal Iklan</TableHead>
               <TableHead>Nama EC</TableHead>
-              <TableHead>Tanggal Update Paid</TableHead>
+              <TableHead>Tanggal Share</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -89,10 +121,47 @@ const LeadsEC = () => {
                   <TableCell>{row.asal_iklan}</TableCell>
                   <TableCell>{row.nama_ec || "-"}</TableCell>
                   <TableCell>
-                    {row.tanggal_update_paid 
-                      ? format(new Date(row.tanggal_update_paid), "dd/MM/yyyy")
-                      : "-"
-                    }
+                    {editingRow === row.id ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-[200px] justify-start text-left font-normal",
+                              !editingDate && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {editingDate ? format(editingDate, "dd/MM/yyyy") : "Pilih tanggal"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={editingDate}
+                            onSelect={(date) => {
+                              setEditingDate(date);
+                              handleDateChange(row.id, date);
+                            }}
+                            initialFocus
+                            className="pointer-events-auto"
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setEditingRow(row.id);
+                          setEditingDate(row.tanggal_share ? new Date(row.tanggal_share) : undefined);
+                        }}
+                        className="text-left hover:underline"
+                      >
+                        {row.tanggal_share 
+                          ? format(new Date(row.tanggal_share), "dd/MM/yyyy")
+                          : "-"
+                        }
+                      </button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
