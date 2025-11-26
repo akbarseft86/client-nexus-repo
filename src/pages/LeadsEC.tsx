@@ -59,25 +59,22 @@ const LeadsEC = () => {
             <TableRow>
               <TableHead>Client ID</TableHead>
               <TableHead>Tanggal</TableHead>
-              <TableHead>Jam</TableHead>
               <TableHead>Nama Client</TableHead>
               <TableHead>No HP</TableHead>
-              <TableHead>Source Iklan</TableHead>
               <TableHead>Kategori</TableHead>
               <TableHead>Asal Iklan</TableHead>
               <TableHead>Nama EC</TableHead>
               <TableHead>Tanggal Update Paid</TableHead>
-              <TableHead>Keterangan</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={8} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : leadsData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={8} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               leadsData?.map((row) => (
@@ -86,10 +83,8 @@ const LeadsEC = () => {
                   <TableCell>
                     {row.tanggal ? format(new Date(row.tanggal), "dd/MM/yyyy") : "-"}
                   </TableCell>
-                  <TableCell>{row.jam || "-"}</TableCell>
                   <TableCell>{row.nama_client}</TableCell>
                   <TableCell>{row.nohp_client}</TableCell>
-                  <TableCell>{row.source_iklan}</TableCell>
                   <TableCell>{row.kategori}</TableCell>
                   <TableCell>{row.asal_iklan}</TableCell>
                   <TableCell>{row.nama_ec || "-"}</TableCell>
@@ -99,7 +94,6 @@ const LeadsEC = () => {
                       : "-"
                     }
                   </TableCell>
-                  <TableCell>{row.keterangan || "-"}</TableCell>
                 </TableRow>
               ))
             )}
