@@ -8,6 +8,7 @@ import SH2MData from "@/pages/SH2MData";
 import HighticketData from "@/pages/HighticketData";
 import SearchClient from "@/pages/SearchClient";
 import SourceIklanCategories from "@/pages/SourceIklanCategories";
+import LeadsEC from "@/pages/LeadsEC";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
               <Route path="/highticket" element={<HighticketData />} />
               <Route path="/search" element={<SearchClient />} />
               <Route path="/source-categories" element={<SourceIklanCategories />} />
+              <Route path="/leads-ec" element={<LeadsEC />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
