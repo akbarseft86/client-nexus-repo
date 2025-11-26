@@ -82,7 +82,7 @@ export type Database = {
           source_iklan: string
           status_payment: string | null
           tanggal: string
-          tanggal_update_paid: string | null
+          tanggal_share: string | null
           updated_at: string
         }
         Insert: {
@@ -98,7 +98,7 @@ export type Database = {
           source_iklan: string
           status_payment?: string | null
           tanggal: string
-          tanggal_update_paid?: string | null
+          tanggal_share?: string | null
           updated_at?: string
         }
         Update: {
@@ -114,7 +114,7 @@ export type Database = {
           source_iklan?: string
           status_payment?: string | null
           tanggal?: string
-          tanggal_update_paid?: string | null
+          tanggal_share?: string | null
           updated_at?: string
         }
         Relationships: []
