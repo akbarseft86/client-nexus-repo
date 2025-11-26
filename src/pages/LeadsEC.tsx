@@ -59,20 +59,33 @@ const LeadsEC = () => {
     if (!newDate) return;
     
     try {
+      const formattedDate = format(newDate, "yyyy-MM-dd");
+      
+      // Optimistic update - update cache directly without refetching
+      queryClient.setQueryData(["leads-ec"], (oldData: any) => {
+        if (!oldData) return oldData;
+        return oldData.map((row: any) => 
+          row.id === rowId 
+            ? { ...row, tanggal_share: formattedDate }
+            : row
+        );
+      });
+
       const { error } = await supabase
         .from("sh2m_data")
-        .update({ tanggal_share: format(newDate, "yyyy-MM-dd") })
+        .update({ tanggal_share: formattedDate })
         .eq("id", rowId);
 
       if (error) throw error;
 
       toast.success("Tanggal Share berhasil diupdate");
-      queryClient.invalidateQueries({ queryKey: ["leads-ec"] });
       setEditingRow(null);
       setEditingDate(undefined);
     } catch (error) {
       console.error("Error updating tanggal share:", error);
       toast.error("Gagal mengupdate tanggal share");
+      // Revert on error
+      queryClient.invalidateQueries({ queryKey: ["leads-ec"] });
     }
   };
 
