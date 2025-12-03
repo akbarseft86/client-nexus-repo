@@ -13,14 +13,16 @@ import { useState } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 const LeadsEC = () => {
   const queryClient = useQueryClient();
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: leadsData, isLoading } = useQuery({
     queryKey: ["leads-ec"],
@@ -54,6 +56,11 @@ const LeadsEC = () => {
       }));
     },
   });
+
+  // Filter data based on search query
+  const filteredData = leadsData?.filter((row) =>
+    searchQuery === "" || row.nohp_client?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleDateChange = async (rowId: string, newDate: Date | undefined) => {
     if (!newDate) return;
@@ -98,6 +105,16 @@ const LeadsEC = () => {
         </p>
       </div>
 
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Cari berdasarkan nomor HP..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -117,12 +134,12 @@ const LeadsEC = () => {
               <TableRow>
                 <TableCell colSpan={8} className="text-center">Loading...</TableCell>
               </TableRow>
-            ) : leadsData?.length === 0 ? (
+            ) : filteredData?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
-              leadsData?.map((row) => (
+              filteredData?.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">{row.client_id}</TableCell>
                   <TableCell>
