@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Download, Filter } from "lucide-react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,12 +40,25 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export default function HighticketData() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchClientId, setSearchClientId] = useState("");
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  
+  // Filter states
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterStatusPayment, setFilterStatusPayment] = useState("all");
+  const [filterNamaEC, setFilterNamaEC] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
   
   const queryClient = useQueryClient();
 
@@ -156,18 +170,75 @@ export default function HighticketData() {
     },
   });
 
+  // Filter data
+  const filteredData = highticketData?.filter((row) => {
+    // Filter by date range
+    if (filterDateFrom && new Date(row.tanggal_transaksi) < new Date(filterDateFrom)) return false;
+    if (filterDateTo && new Date(row.tanggal_transaksi) > new Date(filterDateTo)) return false;
+    
+    // Filter by status payment
+    if (filterStatusPayment !== "all" && row.status_payment !== filterStatusPayment) return false;
+    
+    // Filter by nama EC
+    if (filterNamaEC && !row.nama_ec?.toLowerCase().includes(filterNamaEC.toLowerCase())) return false;
+    
+    // Filter by category
+    if (filterCategory !== "all" && row.category !== filterCategory) return false;
+    
+    return true;
+  });
+
+  const handleExportExcel = () => {
+    if (!filteredData || filteredData.length === 0) {
+      toast.error("Tidak ada data untuk diexport");
+      return;
+    }
+
+    const exportData = filteredData.map((row) => ({
+      "Tanggal Transaksi": new Date(row.tanggal_transaksi).toLocaleDateString('id-ID'),
+      "Client ID": row.client_id,
+      "Nama": row.nama,
+      "No HP": row.nohp,
+      "Category": row.category,
+      "Nama Program": row.nama_program,
+      "Harga": row.harga,
+      "Status Payment": row.status_payment,
+      "Nama EC": row.nama_ec,
+      "Tanggal SH2M": row.tanggal_sh2m ? new Date(row.tanggal_sh2m).toLocaleDateString('id-ID') : '-',
+      "Pelaksanaan Program": row.pelaksanaan_program || '-',
+      "Keterangan": row.keterangan || '-',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Highticket Data");
+    
+    const fileName = `highticket_data_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    toast.success("Data berhasil diexport");
+  };
+
+  const clearFilters = () => {
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setFilterStatusPayment("all");
+    setFilterNamaEC("");
+    setFilterCategory("all");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Data Client Highticket</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Tambah Data
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div className="flex gap-2">
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Tambah Data
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Tambah Data Client Highticket</DialogTitle>
             </DialogHeader>
@@ -297,9 +368,93 @@ export default function HighticketData() {
                 </Button>
               </form>
             </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      {/* Filter Section */}
+      <Collapsible open={filterOpen} onOpenChange={setFilterOpen}>
+        <div className="flex items-center justify-between">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Filter className="h-4 w-4" />
+              Filter Data
+            </Button>
+          </CollapsibleTrigger>
+          <Button variant="outline" onClick={handleExportExcel} className="gap-2">
+            <Download className="h-4 w-4" />
+            Export Excel ({filteredData?.length || 0} data)
+          </Button>
+        </div>
+        <CollapsibleContent className="mt-4">
+          <Card className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div>
+                <Label htmlFor="filterDateFrom">Dari Tanggal</Label>
+                <Input
+                  id="filterDateFrom"
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="filterDateTo">Sampai Tanggal</Label>
+                <Input
+                  id="filterDateTo"
+                  type="date"
+                  value={filterDateTo}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="filterStatusPayment">Status Payment</Label>
+                <Select value={filterStatusPayment} onValueChange={setFilterStatusPayment}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua</SelectItem>
+                    <SelectItem value="Lunas">Lunas</SelectItem>
+                    <SelectItem value="DP">DP</SelectItem>
+                    <SelectItem value="Angsuran">Angsuran</SelectItem>
+                    <SelectItem value="Pelunasan">Pelunasan</SelectItem>
+                    <SelectItem value="Bonus">Bonus</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="filterCategory">Category</Label>
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua</SelectItem>
+                    <SelectItem value="Program">Program</SelectItem>
+                    <SelectItem value="Merchandise">Merchandise</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="filterNamaEC">Nama EC</Label>
+                <Input
+                  id="filterNamaEC"
+                  placeholder="Cari nama EC..."
+                  value={filterNamaEC}
+                  onChange={(e) => setFilterNamaEC(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button variant="ghost" onClick={clearFilters}>
+                Reset Filter
+              </Button>
+            </div>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       <Card>
         <Table>
@@ -325,12 +480,12 @@ export default function HighticketData() {
               <TableRow>
                 <TableCell colSpan={13} className="text-center">Loading...</TableCell>
               </TableRow>
-            ) : highticketData?.length === 0 ? (
+            ) : filteredData?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={13} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
-              highticketData?.map((row) => (
+              filteredData?.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell>{new Date(row.tanggal_transaksi).toLocaleDateString('id-ID')}</TableCell>
                   <TableCell className="font-medium">{row.client_id}</TableCell>
