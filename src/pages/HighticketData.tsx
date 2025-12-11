@@ -267,6 +267,7 @@ export default function HighticketData() {
                   <p className="text-sm"><strong>Nama:</strong> {selectedClient.nama_client}</p>
                   <p className="text-sm"><strong>No HP:</strong> {selectedClient.nohp_client}</p>
                   <p className="text-sm"><strong>Client ID:</strong> {selectedClient.client_id}</p>
+                  <p className="text-sm"><strong>Tanggal SH2M:</strong> {selectedClient.tanggal ? new Date(selectedClient.tanggal).toLocaleDateString('id-ID') : '-'}</p>
                 </Card>
               )}
 
@@ -352,7 +353,14 @@ export default function HighticketData() {
                   </div>
                   <div>
                     <Label htmlFor="tanggal_sh2m">Tanggal SH2M</Label>
-                    <Input id="tanggal_sh2m" name="tanggal_sh2m" type="date" />
+                    <Input 
+                      id="tanggal_sh2m" 
+                      name="tanggal_sh2m" 
+                      type="date" 
+                      defaultValue={selectedClient?.tanggal || ''} 
+                      readOnly={!!selectedClient?.tanggal}
+                      className={selectedClient?.tanggal ? "bg-muted" : ""}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="pelaksanaan_program">Pelaksanaan Program</Label>
