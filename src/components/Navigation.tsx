@@ -1,5 +1,5 @@
 import { NavLink } from "@/components/NavLink";
-import { Database, FileText, Search, Tags, UserCheck } from "lucide-react";
+import { Database, FileText, Search, Tags, UserCheck, CreditCard } from "lucide-react";
 
 export default function Navigation() {
   return (
@@ -23,6 +23,14 @@ export default function Navigation() {
             >
               <FileText className="h-4 w-4" />
               Data Highticket
+            </NavLink>
+            <NavLink
+              to="/cicilan"
+              className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              activeClassName="bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+            >
+              <CreditCard className="h-4 w-4" />
+              Data Cicilan
             </NavLink>
             <NavLink
               to="/search"

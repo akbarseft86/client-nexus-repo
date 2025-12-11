@@ -68,6 +68,44 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_history: {
+        Row: {
+          created_at: string
+          highticket_id: string
+          id: string
+          jumlah_bayar: number
+          keterangan: string | null
+          tanggal_bayar: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          highticket_id: string
+          id?: string
+          jumlah_bayar: number
+          keterangan?: string | null
+          tanggal_bayar: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          highticket_id?: string
+          id?: string
+          jumlah_bayar?: number
+          keterangan?: string | null
+          tanggal_bayar?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_history_highticket_id_fkey"
+            columns: ["highticket_id"]
+            isOneToOne: false
+            referencedRelation: "highticket_data"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sh2m_data: {
         Row: {
           asal_iklan: string | null
