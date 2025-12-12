@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Download, Filter } from "lucide-react";
+import { Plus, Trash2, Download, Filter, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import {
@@ -48,6 +48,8 @@ import {
 
 export default function HighticketData() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingData, setEditingData] = useState<any>(null);
   const [searchClientId, setSearchClientId] = useState("");
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -169,6 +171,46 @@ export default function HighticketData() {
       setDeleteConfirmId(null);
     },
   });
+
+  const editMutation = useMutation({
+    mutationFn: async (data: { id: string; formData: FormData }) => {
+      const updateData = {
+        tanggal_transaksi: data.formData.get("tanggal_transaksi") as string,
+        client_id: data.formData.get("client_id") as string,
+        nama: data.formData.get("nama") as string,
+        nohp: data.formData.get("nohp") as string,
+        category: data.formData.get("category") as string,
+        nama_program: data.formData.get("nama_program") as string,
+        harga: parseFloat(data.formData.get("harga") as string),
+        status_payment: data.formData.get("status_payment") as string,
+        nama_ec: data.formData.get("nama_ec") as string,
+        tanggal_sh2m: data.formData.get("tanggal_sh2m") as string || null,
+        pelaksanaan_program: data.formData.get("pelaksanaan_program") as string,
+        keterangan: data.formData.get("keterangan") as string,
+      };
+
+      const { error } = await supabase
+        .from("highticket_data")
+        .update(updateData)
+        .eq("id", data.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["highticket-data"] });
+      toast.success("Data berhasil diperbarui");
+      setEditDialogOpen(false);
+      setEditingData(null);
+    },
+    onError: () => {
+      toast.error("Gagal memperbarui data");
+    },
+  });
+
+  const handleEdit = (row: any) => {
+    setEditingData(row);
+    setEditDialogOpen(true);
+  };
 
   // Filter data
   const filteredData = highticketData?.filter((row) => {
@@ -530,13 +572,22 @@ export default function HighticketData() {
                   <TableCell>{row.pelaksanaan_program}</TableCell>
                   <TableCell>{row.keterangan}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setDeleteConfirmId(row.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(row)}
+                      >
+                        <Pencil className="h-4 w-4 text-primary" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeleteConfirmId(row.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -544,6 +595,145 @@ export default function HighticketData() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Data Client Highticket</DialogTitle>
+          </DialogHeader>
+          
+          {editingData && (
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              editMutation.mutate({ id: editingData.id, formData: new FormData(e.currentTarget) });
+            }} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit_tanggal_transaksi">Tanggal Transaksi</Label>
+                  <Input 
+                    id="edit_tanggal_transaksi" 
+                    name="tanggal_transaksi" 
+                    type="date" 
+                    defaultValue={editingData.tanggal_transaksi}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_client_id">Client ID</Label>
+                  <Input 
+                    id="edit_client_id" 
+                    name="client_id" 
+                    defaultValue={editingData.client_id}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_nama">Nama</Label>
+                  <Input 
+                    id="edit_nama" 
+                    name="nama" 
+                    defaultValue={editingData.nama}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_nohp">No HP</Label>
+                  <Input 
+                    id="edit_nohp" 
+                    name="nohp" 
+                    defaultValue={editingData.nohp}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_category">Category</Label>
+                  <Select name="category" defaultValue={editingData.category} required>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Program">Program</SelectItem>
+                      <SelectItem value="Merchandise">Merchandise</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="edit_nama_program">Nama Program</Label>
+                  <Input 
+                    id="edit_nama_program" 
+                    name="nama_program" 
+                    defaultValue={editingData.nama_program}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_harga">Harga</Label>
+                  <Input 
+                    id="edit_harga" 
+                    name="harga" 
+                    type="number" 
+                    defaultValue={editingData.harga}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_status_payment">Status Payment</Label>
+                  <Select name="status_payment" defaultValue={editingData.status_payment} required>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Lunas">Lunas</SelectItem>
+                      <SelectItem value="DP">DP</SelectItem>
+                      <SelectItem value="Angsuran">Angsuran</SelectItem>
+                      <SelectItem value="Pelunasan">Pelunasan</SelectItem>
+                      <SelectItem value="Bonus">Bonus</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="edit_nama_ec">Nama EC</Label>
+                  <Input 
+                    id="edit_nama_ec" 
+                    name="nama_ec" 
+                    defaultValue={editingData.nama_ec}
+                    required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_tanggal_sh2m">Tanggal SH2M</Label>
+                  <Input 
+                    id="edit_tanggal_sh2m" 
+                    name="tanggal_sh2m" 
+                    type="date" 
+                    defaultValue={editingData.tanggal_sh2m || ''}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_pelaksanaan_program">Pelaksanaan Program</Label>
+                  <Input 
+                    id="edit_pelaksanaan_program" 
+                    name="pelaksanaan_program" 
+                    defaultValue={editingData.pelaksanaan_program || ''}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="edit_keterangan">Keterangan</Label>
+                  <Input 
+                    id="edit_keterangan" 
+                    name="keterangan" 
+                    defaultValue={editingData.keterangan || ''}
+                  />
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={editMutation.isPending}>
+                {editMutation.isPending ? "Menyimpan..." : "Simpan Perubahan"}
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
