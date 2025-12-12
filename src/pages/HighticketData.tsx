@@ -7,8 +7,21 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Download, Filter, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { id } from "date-fns/locale";
+
+const formatPelaksanaanProgram = (value: string | null): string => {
+  if (!value) return '-';
+  try {
+    const date = parseISO(value);
+    if (isValid(date)) {
+      return format(date, "dd MMMM yyyy", { locale: id });
+    }
+    return value;
+  } catch {
+    return value;
+  }
+};
 import {
   AlertDialog,
   AlertDialogAction,
@@ -249,7 +262,7 @@ export default function HighticketData() {
       "Status Payment": row.status_payment,
       "Nama EC": row.nama_ec,
       "Tanggal SH2M": row.tanggal_sh2m ? new Date(row.tanggal_sh2m).toLocaleDateString('id-ID') : '-',
-      "Pelaksanaan Program": row.pelaksanaan_program ? format(parseISO(row.pelaksanaan_program), "dd MMMM yyyy", { locale: id }) : '-',
+      "Pelaksanaan Program": formatPelaksanaanProgram(row.pelaksanaan_program),
       "Keterangan": row.keterangan || '-',
     }));
 
@@ -572,9 +585,7 @@ export default function HighticketData() {
                     {row.tanggal_sh2m ? new Date(row.tanggal_sh2m).toLocaleDateString('id-ID') : '-'}
                   </TableCell>
                   <TableCell>
-                    {row.pelaksanaan_program 
-                      ? format(parseISO(row.pelaksanaan_program), "dd MMMM yyyy", { locale: id }) 
-                      : '-'}
+                    {formatPelaksanaanProgram(row.pelaksanaan_program)}
                   </TableCell>
                   <TableCell>{row.keterangan}</TableCell>
                   <TableCell className="text-right">
