@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Download, Filter, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { format, parseISO } from "date-fns";
+import { id } from "date-fns/locale";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -247,7 +249,7 @@ export default function HighticketData() {
       "Status Payment": row.status_payment,
       "Nama EC": row.nama_ec,
       "Tanggal SH2M": row.tanggal_sh2m ? new Date(row.tanggal_sh2m).toLocaleDateString('id-ID') : '-',
-      "Pelaksanaan Program": row.pelaksanaan_program || '-',
+      "Pelaksanaan Program": row.pelaksanaan_program ? format(parseISO(row.pelaksanaan_program), "dd MMMM yyyy", { locale: id }) : '-',
       "Keterangan": row.keterangan || '-',
     }));
 
@@ -406,7 +408,7 @@ export default function HighticketData() {
                   </div>
                   <div>
                     <Label htmlFor="pelaksanaan_program">Pelaksanaan Program</Label>
-                    <Input id="pelaksanaan_program" name="pelaksanaan_program" />
+                    <Input id="pelaksanaan_program" name="pelaksanaan_program" type="date" />
                   </div>
                   <div className="col-span-2">
                     <Label htmlFor="keterangan">Keterangan</Label>
@@ -569,7 +571,11 @@ export default function HighticketData() {
                   <TableCell>
                     {row.tanggal_sh2m ? new Date(row.tanggal_sh2m).toLocaleDateString('id-ID') : '-'}
                   </TableCell>
-                  <TableCell>{row.pelaksanaan_program}</TableCell>
+                  <TableCell>
+                    {row.pelaksanaan_program 
+                      ? format(parseISO(row.pelaksanaan_program), "dd MMMM yyyy", { locale: id }) 
+                      : '-'}
+                  </TableCell>
                   <TableCell>{row.keterangan}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
@@ -715,6 +721,7 @@ export default function HighticketData() {
                   <Input 
                     id="edit_pelaksanaan_program" 
                     name="pelaksanaan_program" 
+                    type="date"
                     defaultValue={editingData.pelaksanaan_program || ''}
                   />
                 </div>
