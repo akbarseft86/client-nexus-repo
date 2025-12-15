@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Download, Search, AlertTriangle, Eye } from "lucide-react";
+import { Download, Search, AlertTriangle, Eye, Lock } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -46,6 +46,14 @@ interface DuplicateGroup {
   key: string;
   records: DuplicateRecord[];
   duplicateType: "same-branch" | "cross-branch";
+  assignedBranch?: string | null;
+}
+
+interface BranchAssignment {
+  id: string;
+  duplicate_key: string;
+  duplicate_type: string;
+  assigned_branch: string;
 }
 
 export default function DataDuplikat() {
@@ -53,6 +61,7 @@ export default function DataDuplikat() {
   const [duplicateType, setDuplicateType] = useState<"phone" | "name">("phone");
   const [filterType, setFilterType] = useState<"all" | "same-branch" | "cross-branch">("all");
   const [selectedGroup, setSelectedGroup] = useState<DuplicateGroup | null>(null);
+  const queryClient = useQueryClient();
 
   // Fetch all SH2M data from both branches
   const { data: sh2mData, isLoading } = useQuery({
@@ -66,6 +75,72 @@ export default function DataDuplikat() {
       if (error) throw error;
       return data;
     },
+  });
+
+  // Fetch branch assignments
+  const { data: branchAssignments } = useQuery({
+    queryKey: ["duplicate-branch-assignments", duplicateType],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("duplicate_branch_assignments")
+        .select("*")
+        .eq("duplicate_type", duplicateType);
+      
+      if (error) throw error;
+      return data as BranchAssignment[];
+    },
+  });
+
+  // Mutation to save/update branch assignment
+  const assignBranchMutation = useMutation({
+    mutationFn: async ({ 
+      duplicateKey, 
+      assignedBranch 
+    }: { 
+      duplicateKey: string; 
+      assignedBranch: string;
+    }) => {
+      // Check if assignment exists
+      const { data: existing } = await supabase
+        .from("duplicate_branch_assignments")
+        .select("id")
+        .eq("duplicate_key", duplicateKey)
+        .eq("duplicate_type", duplicateType)
+        .single();
+
+      if (existing) {
+        // Update
+        const { error } = await supabase
+          .from("duplicate_branch_assignments")
+          .update({ assigned_branch: assignedBranch })
+          .eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        // Insert
+        const { error } = await supabase
+          .from("duplicate_branch_assignments")
+          .insert({
+            duplicate_key: duplicateKey,
+            duplicate_type: duplicateType,
+            assigned_branch: assignedBranch,
+          });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["duplicate-branch-assignments"] });
+      toast.success("Cabang berhasil ditentukan");
+    },
+    onError: (error) => {
+      console.error("Error assigning branch:", error);
+      toast.error("Gagal menyimpan penentuan cabang");
+    },
+  });
+
+  // Create assignment map for quick lookup
+  const assignmentMap = new Map<string, string>();
+  branchAssignments?.forEach((assignment) => {
+    assignmentMap.set(assignment.duplicate_key, assignment.assigned_branch);
   });
 
   // Find duplicates
@@ -100,6 +175,7 @@ export default function DataDuplikat() {
           key,
           records: records.sort((a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime()),
           duplicateType: isCrossBranch ? "cross-branch" : "same-branch" as "same-branch" | "cross-branch",
+          assignedBranch: assignmentMap.get(key) || null,
         };
       })
       .sort((a, b) => b.records.length - a.records.length);
@@ -139,6 +215,19 @@ export default function DataDuplikat() {
     });
   };
 
+  const handleBranchChange = (groupKey: string, branch: string) => {
+    assignBranchMutation.mutate({
+      duplicateKey: groupKey,
+      assignedBranch: branch,
+    });
+  };
+
+  const isRecordFrozen = (record: DuplicateRecord, assignedBranch: string | null) => {
+    if (!assignedBranch) return false;
+    const recordBranch = getBranchLabel(record.asal_iklan);
+    return recordBranch !== assignedBranch;
+  };
+
   const handleExportExcel = () => {
     if (filteredGroups.length === 0) {
       toast.error("Tidak ada data untuk diexport");
@@ -151,11 +240,13 @@ export default function DataDuplikat() {
         "Jumlah Duplikat": group.records.length.toString(),
         "Tipe Duplikat": group.duplicateType === "cross-branch" ? "Antar Cabang" : "Sesama Cabang",
         "Nama Client": group.records[0].nama_client,
+        "Cabang Terpilih": group.assignedBranch || "-",
       };
 
       // Add duplicate columns
       group.records.forEach((record, index) => {
-        row[`Duplikat ${index + 1}`] = `${getBranchLabel(record.asal_iklan)} - ${formatDate(record.tanggal)}`;
+        const isFrozen = isRecordFrozen(record, group.assignedBranch);
+        row[`Duplikat ${index + 1}`] = `${getBranchLabel(record.asal_iklan)} - ${formatDate(record.tanggal)}${isFrozen ? " (Frozen)" : ""}`;
       });
 
       return row;
@@ -288,6 +379,7 @@ export default function DataDuplikat() {
                 <TableHead>Nama Client</TableHead>
                 <TableHead>No HP</TableHead>
                 <TableHead>Tipe</TableHead>
+                <TableHead>Cabang</TableHead>
                 <TableHead>Jumlah</TableHead>
                 {Array.from({ length: Math.min(maxDuplicates, 5) }, (_, i) => (
                   <TableHead key={i}>Duplikat {i + 1}</TableHead>
@@ -313,6 +405,20 @@ export default function DataDuplikat() {
                     </span>
                   </TableCell>
                   <TableCell>
+                    <Select
+                      value={group.assignedBranch || ""}
+                      onValueChange={(v) => handleBranchChange(group.key, v)}
+                    >
+                      <SelectTrigger className="w-28 bg-popover h-8">
+                        <SelectValue placeholder="Pilih" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover z-50">
+                        <SelectItem value="Bekasi">Bekasi</SelectItem>
+                        <SelectItem value="Jogja">Jogja</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
                     <span className="text-xs px-2 py-1 rounded bg-muted">
                       {group.records.length}x
                     </span>
@@ -321,15 +427,20 @@ export default function DataDuplikat() {
                     <TableCell key={i} className="text-sm">
                       {group.records[i] ? (
                         <div className="flex flex-col">
-                          <span
-                            className={`text-xs px-1.5 py-0.5 rounded w-fit ${
-                              group.records[i].asal_iklan?.includes("Bekasi")
-                                ? "bg-blue-500/10 text-blue-500"
-                                : "bg-green-500/10 text-green-500"
-                            }`}
-                          >
-                            {getBranchLabel(group.records[i].asal_iklan)}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded w-fit ${
+                                group.records[i].asal_iklan?.includes("Bekasi")
+                                  ? "bg-blue-500/10 text-blue-500"
+                                  : "bg-green-500/10 text-green-500"
+                              }`}
+                            >
+                              {getBranchLabel(group.records[i].asal_iklan)}
+                            </span>
+                            {isRecordFrozen(group.records[i], group.assignedBranch) && (
+                              <Lock className="h-3 w-3 text-muted-foreground" />
+                            )}
+                          </div>
                           <span className="text-muted-foreground text-xs mt-0.5">
                             {formatDate(group.records[i].tanggal)}
                           </span>
@@ -369,21 +480,27 @@ export default function DataDuplikat() {
           
           {selectedGroup && (
             <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="bg-muted rounded-lg p-3 flex-1">
+              <div className="flex gap-4 flex-wrap">
+                <div className="bg-muted rounded-lg p-3 flex-1 min-w-[120px]">
                   <p className="text-sm text-muted-foreground">No HP</p>
                   <p className="font-mono font-medium">{selectedGroup.records[0].nohp_client}</p>
                 </div>
-                <div className="bg-muted rounded-lg p-3 flex-1">
+                <div className="bg-muted rounded-lg p-3 flex-1 min-w-[120px]">
                   <p className="text-sm text-muted-foreground">Jumlah Duplikat</p>
                   <p className="font-medium">{selectedGroup.records.length} record</p>
                 </div>
-                <div className="bg-muted rounded-lg p-3 flex-1">
+                <div className="bg-muted rounded-lg p-3 flex-1 min-w-[120px]">
                   <p className="text-sm text-muted-foreground">Tipe</p>
                   <p className={`font-medium ${
                     selectedGroup.duplicateType === "cross-branch" ? "text-red-500" : "text-yellow-500"
                   }`}>
                     {selectedGroup.duplicateType === "cross-branch" ? "Antar Cabang" : "Sesama Cabang"}
+                  </p>
+                </div>
+                <div className="bg-muted rounded-lg p-3 flex-1 min-w-[120px]">
+                  <p className="text-sm text-muted-foreground">Cabang Terpilih</p>
+                  <p className="font-medium text-primary">
+                    {selectedGroup.assignedBranch || "Belum dipilih"}
                   </p>
                 </div>
               </div>
@@ -394,48 +511,73 @@ export default function DataDuplikat() {
                     <TableHead>Keterangan</TableHead>
                     <TableHead>Tanggal</TableHead>
                     <TableHead>Cabang</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Client ID</TableHead>
                     <TableHead>Source Iklan</TableHead>
                     <TableHead>Nama EC</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Status Payment</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {selectedGroup.records.map((record, index) => (
-                    <TableRow key={record.id}>
-                      <TableCell className="font-medium">
-                        Duplikat {index + 1}
-                      </TableCell>
-                      <TableCell>{formatDate(record.tanggal)}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`text-xs px-2 py-1 rounded ${
-                            record.asal_iklan?.includes("Bekasi")
-                              ? "bg-blue-500/10 text-blue-500"
-                              : "bg-green-500/10 text-green-500"
-                          }`}
-                        >
-                          {getBranchLabel(record.asal_iklan)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{record.client_id}</TableCell>
-                      <TableCell>{record.source_iklan}</TableCell>
-                      <TableCell>{record.nama_ec || "-"}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`text-xs px-2 py-1 rounded ${
-                            record.status_payment === "paid"
-                              ? "bg-green-500/10 text-green-500"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {record.status_payment || "unpaid"}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {selectedGroup.records.map((record, index) => {
+                    const isFrozen = isRecordFrozen(record, selectedGroup.assignedBranch);
+                    return (
+                      <TableRow key={record.id} className={isFrozen ? "opacity-50" : ""}>
+                        <TableCell className="font-medium">
+                          Duplikat {index + 1}
+                        </TableCell>
+                        <TableCell>{formatDate(record.tanggal)}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`text-xs px-2 py-1 rounded ${
+                              record.asal_iklan?.includes("Bekasi")
+                                ? "bg-blue-500/10 text-blue-500"
+                                : "bg-green-500/10 text-green-500"
+                            }`}
+                          >
+                            {getBranchLabel(record.asal_iklan)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {isFrozen ? (
+                            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+                              <Lock className="h-3 w-3" />
+                              Frozen
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-500">
+                              Aktif
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{record.client_id}</TableCell>
+                        <TableCell>{record.source_iklan}</TableCell>
+                        <TableCell>{record.nama_ec || "-"}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`text-xs px-2 py-1 rounded ${
+                              record.status_payment === "paid"
+                                ? "bg-green-500/10 text-green-500"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {record.status_payment || "unpaid"}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
+
+              {selectedGroup.assignedBranch && (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400 flex items-center gap-2">
+                    <Lock className="h-4 w-4" />
+                    Data dengan status "Frozen" tidak dapat diolah oleh cabang tersebut karena admin telah menentukan cabang <strong>{selectedGroup.assignedBranch}</strong> sebagai pemilik data ini.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

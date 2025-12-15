@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      duplicate_branch_assignments: {
+        Row: {
+          assigned_branch: string
+          created_at: string
+          duplicate_key: string
+          duplicate_type: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_branch: string
+          created_at?: string
+          duplicate_key: string
+          duplicate_type?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_branch?: string
+          created_at?: string
+          duplicate_key?: string
+          duplicate_type?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       highticket_data: {
         Row: {
           bukti_transfer: string | null
