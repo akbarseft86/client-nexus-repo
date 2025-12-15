@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Download, Search, AlertTriangle } from "lucide-react";
+import { Download, Search, AlertTriangle, Eye } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -21,18 +21,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
+interface DuplicateRecord {
+  id: string;
+  tanggal: string;
+  nama_client: string;
+  nohp_client: string;
+  source_iklan: string;
+  asal_iklan: string;
+  nama_ec: string | null;
+  status_payment: string | null;
+  client_id: string;
+}
+
 interface DuplicateGroup {
   key: string;
-  records: any[];
-  branches: string[];
+  records: DuplicateRecord[];
+  duplicateType: "same-branch" | "cross-branch";
 }
 
 export default function DataDuplikat() {
   const [searchTerm, setSearchTerm] = useState("");
   const [duplicateType, setDuplicateType] = useState<"phone" | "name">("phone");
+  const [filterType, setFilterType] = useState<"all" | "same-branch" | "cross-branch">("all");
+  const [selectedGroup, setSelectedGroup] = useState<DuplicateGroup | null>(null);
 
   // Fetch all SH2M data from both branches
   const { data: sh2mData, isLoading } = useQuery({
@@ -52,7 +72,7 @@ export default function DataDuplikat() {
   const duplicateGroups: DuplicateGroup[] = (() => {
     if (!sh2mData) return [];
 
-    const groups: Record<string, any[]> = {};
+    const groups: Record<string, DuplicateRecord[]> = {};
     
     sh2mData.forEach((record) => {
       const key = duplicateType === "phone" 
@@ -67,24 +87,31 @@ export default function DataDuplikat() {
       }
     });
 
-    // Filter to only show groups with records from BOTH branches
+    // Filter to only show groups with more than 1 record (duplicates)
     return Object.entries(groups)
-      .filter(([_, records]) => {
+      .filter(([_, records]) => records.length > 1)
+      .map(([key, records]) => {
         const branches = new Set(records.map(r => r.asal_iklan));
         const hasBekasi = Array.from(branches).some(b => b?.includes("Bekasi"));
         const hasJogja = Array.from(branches).some(b => b?.includes("Jogja"));
-        return hasBekasi && hasJogja;
+        const isCrossBranch = hasBekasi && hasJogja;
+        
+        return {
+          key,
+          records: records.sort((a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime()),
+          duplicateType: isCrossBranch ? "cross-branch" : "same-branch" as "same-branch" | "cross-branch",
+        };
       })
-      .map(([key, records]) => ({
-        key,
-        records,
-        branches: [...new Set(records.map(r => r.asal_iklan))],
-      }))
       .sort((a, b) => b.records.length - a.records.length);
   })();
 
-  // Filter by search term
+  // Filter by search term and type
   const filteredGroups = duplicateGroups.filter((group) => {
+    // Filter by duplicate type
+    if (filterType === "same-branch" && group.duplicateType !== "same-branch") return false;
+    if (filterType === "cross-branch" && group.duplicateType !== "cross-branch") return false;
+    
+    // Filter by search term
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -97,29 +124,41 @@ export default function DataDuplikat() {
     );
   });
 
+  const getBranchLabel = (asalIklan: string | null) => {
+    if (!asalIklan) return "Unknown";
+    if (asalIklan.includes("Bekasi")) return "Bekasi";
+    if (asalIklan.includes("Jogja")) return "Jogja";
+    return asalIklan;
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   const handleExportExcel = () => {
     if (filteredGroups.length === 0) {
       toast.error("Tidak ada data untuk diexport");
       return;
     }
 
-    const exportData: any[] = [];
-    
-    filteredGroups.forEach((group) => {
-      group.records.forEach((record) => {
-        exportData.push({
-          "Grup Duplikat": group.key,
-          "Jumlah Duplikat": group.records.length,
-          "Tanggal": new Date(record.tanggal).toLocaleDateString("id-ID"),
-          "Client ID": record.client_id,
-          "Nama Client": record.nama_client,
-          "No HP": record.nohp_client,
-          "Source Iklan": record.source_iklan,
-          "Asal Iklan": record.asal_iklan,
-          "Nama EC": record.nama_ec || "-",
-          "Status Payment": record.status_payment || "-",
-        });
+    const exportData = filteredGroups.map((group) => {
+      const row: Record<string, string> = {
+        "No HP / Nama": group.key,
+        "Jumlah Duplikat": group.records.length.toString(),
+        "Tipe Duplikat": group.duplicateType === "cross-branch" ? "Antar Cabang" : "Sesama Cabang",
+        "Nama Client": group.records[0].nama_client,
+      };
+
+      // Add duplicate columns
+      group.records.forEach((record, index) => {
+        row[`Duplikat ${index + 1}`] = `${getBranchLabel(record.asal_iklan)} - ${formatDate(record.tanggal)}`;
       });
+
+      return row;
     });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -136,6 +175,12 @@ export default function DataDuplikat() {
     0
   );
 
+  const sameBranchCount = filteredGroups.filter(g => g.duplicateType === "same-branch").length;
+  const crossBranchCount = filteredGroups.filter(g => g.duplicateType === "cross-branch").length;
+
+  // Get max duplicates for dynamic columns
+  const maxDuplicates = Math.max(...(filteredGroups.map(g => g.records.length) || [0]), 2);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -145,7 +190,7 @@ export default function DataDuplikat() {
             Data Duplikat
           </h1>
           <p className="text-muted-foreground">
-            Menampilkan data client yang muncul di kedua cabang (Bekasi & Jogja)
+            Menampilkan data client duplikat dari semua cabang
           </p>
         </div>
         <Button onClick={handleExportExcel} variant="outline" className="gap-2">
@@ -155,20 +200,22 @@ export default function DataDuplikat() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card className="p-4">
           <p className="text-sm text-muted-foreground">Total Grup Duplikat</p>
           <p className="text-2xl font-bold">{filteredGroups.length}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Total Record Duplikat</p>
+          <p className="text-sm text-muted-foreground">Total Record</p>
           <p className="text-2xl font-bold">{totalDuplicateRecords}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Tipe Deteksi</p>
-          <p className="text-2xl font-bold capitalize">
-            {duplicateType === "phone" ? "No HP" : "Nama Client"}
-          </p>
+          <p className="text-sm text-muted-foreground">Sesama Cabang</p>
+          <p className="text-2xl font-bold text-yellow-500">{sameBranchCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Antar Cabang</p>
+          <p className="text-2xl font-bold text-red-500">{crossBranchCount}</p>
         </Card>
       </div>
 
@@ -203,10 +250,26 @@ export default function DataDuplikat() {
               </SelectContent>
             </Select>
           </div>
+          <div className="w-full sm:w-48">
+            <Label htmlFor="filterType">Tipe Duplikat</Label>
+            <Select
+              value={filterType}
+              onValueChange={(v) => setFilterType(v as "all" | "same-branch" | "cross-branch")}
+            >
+              <SelectTrigger className="bg-popover">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="all">Semua</SelectItem>
+                <SelectItem value="same-branch">Sesama Cabang</SelectItem>
+                <SelectItem value="cross-branch">Antar Cabang</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </Card>
 
-      {/* Duplicate Groups */}
+      {/* Duplicate Table */}
       {isLoading ? (
         <Card className="p-8 text-center text-muted-foreground">
           Loading...
@@ -214,64 +277,136 @@ export default function DataDuplikat() {
       ) : filteredGroups.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground">
           <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-          <p>Tidak ditemukan data duplikat antara cabang Bekasi dan Jogja</p>
+          <p>Tidak ditemukan data duplikat</p>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {filteredGroups.map((group, index) => (
-            <Card key={index} className="overflow-hidden">
-              <div className="bg-warning/10 p-3 border-b">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-warning" />
-                    <span className="font-medium">
-                      {duplicateType === "phone" ? "No HP" : "Nama"}: {group.key}
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">No</TableHead>
+                <TableHead>Nama Client</TableHead>
+                <TableHead>No HP</TableHead>
+                <TableHead>Tipe</TableHead>
+                <TableHead>Jumlah</TableHead>
+                {Array.from({ length: Math.min(maxDuplicates, 5) }, (_, i) => (
+                  <TableHead key={i}>Duplikat {i + 1}</TableHead>
+                ))}
+                <TableHead className="text-right">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredGroups.map((group, index) => (
+                <TableRow key={index}>
+                  <TableCell className="font-medium">{index + 1}</TableCell>
+                  <TableCell>{group.records[0].nama_client}</TableCell>
+                  <TableCell className="font-mono">{group.records[0].nohp_client}</TableCell>
+                  <TableCell>
+                    <span
+                      className={`text-xs px-2 py-1 rounded ${
+                        group.duplicateType === "cross-branch"
+                          ? "bg-red-500/10 text-red-500"
+                          : "bg-yellow-500/10 text-yellow-500"
+                      }`}
+                    >
+                      {group.duplicateType === "cross-branch" ? "Antar Cabang" : "Sesama Cabang"}
                     </span>
-                  </div>
-                  <div className="flex gap-2">
-                    {group.branches.map((branch, i) => (
-                      <span
-                        key={i}
-                        className={`text-xs px-2 py-1 rounded ${
-                          branch?.includes("Bekasi")
-                            ? "bg-blue-500/10 text-blue-500"
-                            : "bg-green-500/10 text-green-500"
-                        }`}
-                      >
-                        {branch?.includes("Bekasi") ? "Bekasi" : "Jogja"}
-                      </span>
-                    ))}
-                    <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
-                      {group.records.length} record
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-xs px-2 py-1 rounded bg-muted">
+                      {group.records.length}x
                     </span>
-                  </div>
+                  </TableCell>
+                  {Array.from({ length: Math.min(maxDuplicates, 5) }, (_, i) => (
+                    <TableCell key={i} className="text-sm">
+                      {group.records[i] ? (
+                        <div className="flex flex-col">
+                          <span
+                            className={`text-xs px-1.5 py-0.5 rounded w-fit ${
+                              group.records[i].asal_iklan?.includes("Bekasi")
+                                ? "bg-blue-500/10 text-blue-500"
+                                : "bg-green-500/10 text-green-500"
+                            }`}
+                          >
+                            {getBranchLabel(group.records[i].asal_iklan)}
+                          </span>
+                          <span className="text-muted-foreground text-xs mt-0.5">
+                            {formatDate(group.records[i].tanggal)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                  ))}
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedGroup(group)}
+                      className="gap-1"
+                    >
+                      <Eye className="h-4 w-4" />
+                      Detail
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      {/* Detail Dialog */}
+      <Dialog open={!!selectedGroup} onOpenChange={(open) => !open && setSelectedGroup(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-warning" />
+              Detail Duplikat - {selectedGroup?.records[0]?.nama_client}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedGroup && (
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="bg-muted rounded-lg p-3 flex-1">
+                  <p className="text-sm text-muted-foreground">No HP</p>
+                  <p className="font-mono font-medium">{selectedGroup.records[0].nohp_client}</p>
+                </div>
+                <div className="bg-muted rounded-lg p-3 flex-1">
+                  <p className="text-sm text-muted-foreground">Jumlah Duplikat</p>
+                  <p className="font-medium">{selectedGroup.records.length} record</p>
+                </div>
+                <div className="bg-muted rounded-lg p-3 flex-1">
+                  <p className="text-sm text-muted-foreground">Tipe</p>
+                  <p className={`font-medium ${
+                    selectedGroup.duplicateType === "cross-branch" ? "text-red-500" : "text-yellow-500"
+                  }`}>
+                    {selectedGroup.duplicateType === "cross-branch" ? "Antar Cabang" : "Sesama Cabang"}
+                  </p>
                 </div>
               </div>
+
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Keterangan</TableHead>
                     <TableHead>Tanggal</TableHead>
-                    <TableHead>Client ID</TableHead>
-                    <TableHead>Nama</TableHead>
-                    <TableHead>No HP</TableHead>
-                    <TableHead>Source Iklan</TableHead>
                     <TableHead>Cabang</TableHead>
+                    <TableHead>Client ID</TableHead>
+                    <TableHead>Source Iklan</TableHead>
                     <TableHead>Nama EC</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {group.records.map((record, recordIndex) => (
-                    <TableRow key={recordIndex}>
-                      <TableCell>
-                        {new Date(record.tanggal).toLocaleDateString("id-ID")}
+                  {selectedGroup.records.map((record, index) => (
+                    <TableRow key={record.id}>
+                      <TableCell className="font-medium">
+                        Duplikat {index + 1}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {record.client_id}
-                      </TableCell>
-                      <TableCell>{record.nama_client}</TableCell>
-                      <TableCell>{record.nohp_client}</TableCell>
-                      <TableCell>{record.source_iklan}</TableCell>
+                      <TableCell>{formatDate(record.tanggal)}</TableCell>
                       <TableCell>
                         <span
                           className={`text-xs px-2 py-1 rounded ${
@@ -280,11 +415,11 @@ export default function DataDuplikat() {
                               : "bg-green-500/10 text-green-500"
                           }`}
                         >
-                          {record.asal_iklan?.includes("Bekasi")
-                            ? "Bekasi"
-                            : "Jogja"}
+                          {getBranchLabel(record.asal_iklan)}
                         </span>
                       </TableCell>
+                      <TableCell className="font-mono text-xs">{record.client_id}</TableCell>
+                      <TableCell>{record.source_iklan}</TableCell>
                       <TableCell>{record.nama_ec || "-"}</TableCell>
                       <TableCell>
                         <span
@@ -301,10 +436,10 @@ export default function DataDuplikat() {
                   ))}
                 </TableBody>
               </Table>
-            </Card>
-          ))}
-        </div>
-      )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
