@@ -14,20 +14,30 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Check, X } from "lucide-react";
+import { useBranch } from "@/contexts/BranchContext";
 
 export default function SourceIklanCategories() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const queryClient = useQueryClient();
+  const { selectedBranch, getBranchFilter } = useBranch();
+  const branchFilter = getBranchFilter();
 
-  // Get unique source_iklan from sh2m_data
+  // Get unique source_iklan from sh2m_data filtered by branch
   const { data: uniqueSourceIklan, isLoading: loadingUnique } = useQuery({
-    queryKey: ["unique-source-iklan"],
+    queryKey: ["unique-source-iklan", branchFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("sh2m_data")
         .select("source_iklan")
         .order("source_iklan");
+      
+      // Filter by branch if not SEFT ALL
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
+      }
+      
+      const { data, error } = await query;
       
       if (error) throw error;
       
@@ -50,6 +60,11 @@ export default function SourceIklanCategories() {
       return data;
     },
   });
+
+  // Filter categories to only show ones that exist in the current branch's SH2M data
+  const filteredCategories = categories?.filter(
+    cat => uniqueSourceIklan?.includes(cat.source_iklan)
+  );
 
   // Sync unique source_iklan with categories table
   useEffect(() => {
@@ -107,13 +122,19 @@ export default function SourceIklanCategories() {
 
   const isLoading = loadingUnique || loadingCategories;
 
+  const getBranchName = () => {
+    if (selectedBranch === "SEFT Bekasi") return "Bekasi";
+    if (selectedBranch === "SEFT Jogja") return "Jogja";
+    return "Semua Cabang";
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Kategori Source Iklan</h1>
           <p className="text-muted-foreground mt-1">
-            Kelola kategori untuk setiap source iklan
+            Kelola kategori untuk setiap source iklan - Data dari cabang {getBranchName()}
           </p>
         </div>
       </div>
@@ -132,12 +153,14 @@ export default function SourceIklanCategories() {
               <TableRow>
                 <TableCell colSpan={3} className="text-center">Loading...</TableCell>
               </TableRow>
-            ) : categories?.length === 0 ? (
+            ) : filteredCategories?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={3} className="text-center">
+                  Tidak ada data source iklan untuk cabang {getBranchName()}
+                </TableCell>
               </TableRow>
             ) : (
-              categories?.map((row) => (
+              filteredCategories?.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">{row.source_iklan}</TableCell>
                   <TableCell>
