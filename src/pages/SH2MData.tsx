@@ -523,16 +523,16 @@ export default function SH2MData() {
             <DialogTrigger asChild>
               <Button>
                 <Upload className="mr-2 h-4 w-4" />
-                Upload Excel
+                Upload File
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Upload Data dari Excel</DialogTitle>
+                <DialogTitle>Upload Data dari File</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="file">Pilih File Excel</Label>
+                  <Label htmlFor="file">Pilih File (Excel/CSV)</Label>
                   <Input
                     id="file"
                     type="file"
