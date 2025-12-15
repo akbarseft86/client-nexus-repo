@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       highticket_data: {
         Row: {
+          bukti_transfer: string | null
           category: string
           client_id: string
           created_at: string
@@ -33,6 +34,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bukti_transfer?: string | null
           category?: string
           client_id: string
           created_at?: string
@@ -50,6 +52,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bukti_transfer?: string | null
           category?: string
           client_id?: string
           created_at?: string
