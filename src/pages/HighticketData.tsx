@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Download, Filter, Pencil } from "lucide-react";
+import { Plus, Trash2, Download, Filter, Pencil, Upload, Image, X } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { format, parseISO, isValid } from "date-fns";
@@ -70,6 +70,11 @@ export default function HighticketData() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
   
   // Filter states
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -82,6 +87,27 @@ export default function HighticketData() {
   const branchFilter = getBranchFilter();
   
   const queryClient = useQueryClient();
+
+  const uploadImage = async (file: File, recordId: string): Promise<string | null> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${recordId}-${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('bukti-transfer')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage
+      .from('bukti-transfer')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  };
 
   const { data: highticketData, isLoading } = useQuery({
     queryKey: ["highticket-data", branchFilter],
@@ -166,8 +192,8 @@ export default function HighticketData() {
   };
 
   const addMutation = useMutation({
-    mutationFn: async (formData: FormData) => {
-      const newData = {
+    mutationFn: async ({ formData, imageFile }: { formData: FormData; imageFile: File | null }) => {
+      const newData: any = {
         tanggal_transaksi: formData.get("tanggal_transaksi") as string,
         client_id: formData.get("client_id") as string,
         nama: formData.get("nama") as string,
@@ -182,8 +208,19 @@ export default function HighticketData() {
         keterangan: formData.get("keterangan") as string,
       };
 
-      const { error } = await supabase.from("highticket_data").insert(newData);
+      const { data, error } = await supabase.from("highticket_data").insert(newData).select().single();
       if (error) throw error;
+
+      // Upload image if provided
+      if (imageFile && data) {
+        const imageUrl = await uploadImage(imageFile, data.id);
+        if (imageUrl) {
+          await supabase
+            .from("highticket_data")
+            .update({ bukti_transfer: imageUrl })
+            .eq("id", data.id);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["highticket-data"] });
@@ -191,6 +228,8 @@ export default function HighticketData() {
       setDialogOpen(false);
       setSelectedClient(null);
       setSearchClientId("");
+      setPreviewImage(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     },
     onError: () => {
       toast.error("Gagal menambahkan data");
@@ -218,8 +257,8 @@ export default function HighticketData() {
   });
 
   const editMutation = useMutation({
-    mutationFn: async (data: { id: string; formData: FormData }) => {
-      const updateData = {
+    mutationFn: async (data: { id: string; formData: FormData; imageFile?: File | null }) => {
+      const updateData: any = {
         tanggal_transaksi: data.formData.get("tanggal_transaksi") as string,
         client_id: data.formData.get("client_id") as string,
         nama: data.formData.get("nama") as string,
@@ -234,6 +273,14 @@ export default function HighticketData() {
         keterangan: data.formData.get("keterangan") as string,
       };
 
+      // Upload new image if provided
+      if (data.imageFile) {
+        const imageUrl = await uploadImage(data.imageFile, data.id);
+        if (imageUrl) {
+          updateData.bukti_transfer = imageUrl;
+        }
+      }
+
       const { error } = await supabase
         .from("highticket_data")
         .update(updateData)
@@ -246,6 +293,8 @@ export default function HighticketData() {
       toast.success("Data berhasil diperbarui");
       setEditDialogOpen(false);
       setEditingData(null);
+      setPreviewImage(null);
+      if (editFileInputRef.current) editFileInputRef.current.value = '';
     },
     onError: () => {
       toast.error("Gagal memperbarui data");
@@ -360,7 +409,9 @@ export default function HighticketData() {
 
               <form onSubmit={(e) => {
                 e.preventDefault();
-                addMutation.mutate(new FormData(e.currentTarget));
+                const formData = new FormData(e.currentTarget);
+                const imageFile = fileInputRef.current?.files?.[0] || null;
+                addMutation.mutate({ formData, imageFile });
               }} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -456,6 +507,47 @@ export default function HighticketData() {
                   <div className="col-span-2">
                     <Label htmlFor="keterangan">Keterangan</Label>
                     <Input id="keterangan" name="keterangan" />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="bukti_transfer">Bukti Transfer</Label>
+                    <div className="flex gap-2 items-center">
+                      <Input 
+                        id="bukti_transfer" 
+                        type="file" 
+                        accept="image/*"
+                        ref={fileInputRef}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => setPreviewImage(e.target?.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="cursor-pointer"
+                      />
+                    </div>
+                    {previewImage && (
+                      <div className="mt-2 relative inline-block">
+                        <img 
+                          src={previewImage} 
+                          alt="Preview" 
+                          className="max-h-32 rounded border"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-6 w-6"
+                          onClick={() => {
+                            setPreviewImage(null);
+                            if (fileInputRef.current) fileInputRef.current.value = '';
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <Button type="submit" className="w-full" disabled={addMutation.isPending}>
@@ -567,17 +659,18 @@ export default function HighticketData() {
               <TableHead>Tanggal SH2M</TableHead>
               <TableHead>Pelaksanaan Program</TableHead>
               <TableHead>Keterangan</TableHead>
+              <TableHead>Bukti Transfer</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={13} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={15} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : filteredData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={13} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={15} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               filteredData?.map((row) => (
@@ -618,6 +711,21 @@ export default function HighticketData() {
                     {formatPelaksanaanProgram(row.pelaksanaan_program)}
                   </TableCell>
                   <TableCell>{row.keterangan}</TableCell>
+                  <TableCell>
+                    {row.bukti_transfer ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setViewImageUrl(row.bukti_transfer)}
+                        className="gap-1"
+                      >
+                        <Image className="h-4 w-4" />
+                        Lihat
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">-</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button
@@ -653,7 +761,8 @@ export default function HighticketData() {
           {editingData && (
             <form onSubmit={(e) => {
               e.preventDefault();
-              editMutation.mutate({ id: editingData.id, formData: new FormData(e.currentTarget) });
+              const imageFile = editFileInputRef.current?.files?.[0] || null;
+              editMutation.mutate({ id: editingData.id, formData: new FormData(e.currentTarget), imageFile });
             }} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -774,6 +883,29 @@ export default function HighticketData() {
                     defaultValue={editingData.keterangan || ''}
                   />
                 </div>
+                <div className="col-span-2">
+                  <Label htmlFor="edit_bukti_transfer">Bukti Transfer</Label>
+                  {editingData.bukti_transfer && (
+                    <div className="mb-2">
+                      <p className="text-sm text-muted-foreground mb-1">Foto saat ini:</p>
+                      <img 
+                        src={editingData.bukti_transfer} 
+                        alt="Bukti transfer" 
+                        className="max-h-32 rounded border"
+                      />
+                    </div>
+                  )}
+                  <Input 
+                    id="edit_bukti_transfer" 
+                    type="file" 
+                    accept="image/*"
+                    ref={editFileInputRef}
+                    className="cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pilih file baru untuk mengganti foto
+                  </p>
+                </div>
               </div>
               <Button type="submit" className="w-full" disabled={editMutation.isPending}>
                 {editMutation.isPending ? "Menyimpan..." : "Simpan Perubahan"}
@@ -803,6 +935,24 @@ export default function HighticketData() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!viewImageUrl} onOpenChange={(open) => !open && setViewImageUrl(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Bukti Transfer</DialogTitle>
+          </DialogHeader>
+          {viewImageUrl && (
+            <div className="flex justify-center">
+              <img 
+                src={viewImageUrl} 
+                alt="Bukti transfer" 
+                className="max-h-[70vh] rounded"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
