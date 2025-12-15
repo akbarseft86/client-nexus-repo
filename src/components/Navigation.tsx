@@ -1,5 +1,4 @@
-import { NavLink } from "@/components/NavLink";
-import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu } from "lucide-react";
+import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,9 +7,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 export default function Navigation() {
   const navigate = useNavigate();
+  const [selectedBranch, setSelectedBranch] = useState("SEFT Jogja");
+
+  const branches = [
+    { id: "bekasi", label: "SEFT Bekasi" },
+    { id: "jogja", label: "SEFT Jogja" },
+    { id: "all", label: "SEFT ALL" },
+  ];
 
   const menuItems = [
     { to: "/", icon: Database, label: "Data SH2M" },
@@ -25,14 +32,37 @@ export default function Navigation() {
     <nav className="border-b bg-card">
       <div className="container mx-auto">
         <div className="flex h-16 items-center justify-between">
-          <h1 className="text-xl font-bold text-foreground">SEFT Jogja</h1>
+          <div className="flex items-center gap-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2 text-xl font-bold">
+                  <Building2 className="h-5 w-5" />
+                  SEFT CORP
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48 bg-popover z-50">
+                {branches.map((branch) => (
+                  <DropdownMenuItem
+                    key={branch.id}
+                    onClick={() => setSelectedBranch(branch.label)}
+                    className={`cursor-pointer ${selectedBranch === branch.label ? "bg-accent" : ""}`}
+                  >
+                    {branch.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <span className="text-sm text-muted-foreground">|</span>
+            <span className="text-sm font-medium text-foreground">{selectedBranch}</span>
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon">
                 <Menu className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-56 bg-popover z-50">
               {menuItems.map((item) => (
                 <DropdownMenuItem
                   key={item.to}
