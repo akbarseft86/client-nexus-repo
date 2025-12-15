@@ -3,8 +3,23 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBranch } from "@/contexts/BranchContext";
-import { Users, FileText, CreditCard, TrendingUp, DollarSign, UserCheck } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths, setMonth, setYear } from "date-fns";
+import { DollarSign, TrendingUp, BarChart3, Calendar } from "lucide-react";
+import { 
+  format, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfYear, 
+  endOfYear, 
+  setMonth, 
+  setYear,
+  eachDayOfInterval,
+  eachWeekOfInterval,
+  eachMonthOfInterval,
+  startOfWeek,
+  endOfWeek,
+  getWeek,
+  parseISO,
+} from "date-fns";
 import { id } from "date-fns/locale";
 import {
   Select,
@@ -13,6 +28,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+} from "recharts";
 
 export default function Dashboard() {
   const { getBranchFilter, selectedBranch } = useBranch();
@@ -22,8 +50,10 @@ export default function Dashboard() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   
   const selectedDate = setYear(setMonth(new Date(), selectedMonth), selectedYear);
-  const startDate = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
-  const endDate = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
+  const monthStartDate = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
+  const monthEndDate = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
+  const yearStartDate = format(startOfYear(selectedDate), 'yyyy-MM-dd');
+  const yearEndDate = format(endOfYear(selectedDate), 'yyyy-MM-dd');
   
   const months = [
     { value: 0, label: "Januari" },
@@ -42,201 +72,271 @@ export default function Dashboard() {
   
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-  // Get SH2M data count for selected month
-  const { data: sh2mData } = useQuery({
-    queryKey: ["dashboard-sh2m", branchFilter, startDate, endDate],
-    queryFn: async () => {
-      let query = supabase
-        .from("sh2m_data")
-        .select("*")
-        .gte("tanggal", startDate)
-        .lte("tanggal", endDate);
-      
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      
-      const paidCount = data?.filter(d => d.status_payment === 'paid').length || 0;
-      return { total: data?.length || 0, paid: paidCount, data };
-    },
-  });
+  // Helper function to get client IDs for branch filter
+  const getClientIds = async () => {
+    if (!branchFilter) return null;
+    
+    const { data: sh2mClients } = await supabase
+      .from("sh2m_data")
+      .select("client_id")
+      .eq("asal_iklan", branchFilter);
+    
+    return sh2mClients?.map(c => c.client_id) || [];
+  };
 
-  // Get Highticket data for selected month
-  const { data: highticketData } = useQuery({
-    queryKey: ["dashboard-highticket", branchFilter, startDate, endDate],
+  // Get Total Revenue (All Time for this branch)
+  const { data: totalRevenue } = useQuery({
+    queryKey: ["dashboard-total-revenue", branchFilter],
     queryFn: async () => {
-      // First get client_ids from sh2m_data filtered by branch
-      let clientQuery = supabase.from("sh2m_data").select("client_id");
-      if (branchFilter) {
-        clientQuery = clientQuery.eq("asal_iklan", branchFilter);
-      }
-      const { data: sh2mClients, error: sh2mError } = await clientQuery;
-      if (sh2mError) throw sh2mError;
+      const clientIds = await getClientIds();
       
-      const clientIds = sh2mClients?.map(c => c.client_id) || [];
-      
-      if (branchFilter && clientIds.length === 0) {
-        return { total: 0, totalRevenue: 0, lunas: 0, data: [] };
+      if (branchFilter && clientIds && clientIds.length === 0) {
+        return 0;
       }
 
-      let query = supabase
-        .from("highticket_data")
-        .select("*")
-        .gte("tanggal_transaksi", startDate)
-        .lte("tanggal_transaksi", endDate);
+      let query = supabase.from("highticket_data").select("harga");
       
-      if (branchFilter && clientIds.length > 0) {
+      if (branchFilter && clientIds && clientIds.length > 0) {
         query = query.in("client_id", clientIds);
       }
       
       const { data, error } = await query;
       if (error) throw error;
       
-      const totalRevenue = data?.reduce((sum, d) => sum + (d.harga || 0), 0) || 0;
-      const lunasCount = data?.filter(d => d.status_payment === 'Lunas').length || 0;
-      
-      return { total: data?.length || 0, totalRevenue, lunas: lunasCount, data };
+      return data?.reduce((sum, d) => sum + (d.harga || 0), 0) || 0;
     },
   });
 
-  // Get comparison with previous month
-  const { data: monthlyStats } = useQuery({
-    queryKey: ["dashboard-monthly", branchFilter, startDate, endDate],
+  // Get Monthly Revenue for the selected year (for monthly chart)
+  const { data: monthlyRevenueData } = useQuery({
+    queryKey: ["dashboard-monthly-revenue", branchFilter, selectedYear],
     queryFn: async () => {
-      const prevMonthDate = subMonths(selectedDate, 1);
-      const startOfLastMonth = format(startOfMonth(prevMonthDate), 'yyyy-MM-dd');
-      const endOfLastMonth = format(endOfMonth(prevMonthDate), 'yyyy-MM-dd');
-
-      // This month SH2M (already have from sh2mData)
-      const thisMonthCount = sh2mData?.total || 0;
-
-      // Last month SH2M
-      let lastMonthQuery = supabase
-        .from("sh2m_data")
-        .select("*", { count: "exact" })
-        .gte("tanggal", startOfLastMonth)
-        .lte("tanggal", endOfLastMonth);
+      const clientIds = await getClientIds();
       
-      if (branchFilter) {
-        lastMonthQuery = lastMonthQuery.eq("asal_iklan", branchFilter);
+      if (branchFilter && clientIds && clientIds.length === 0) {
+        return months.map(m => ({ name: m.label.substring(0, 3), revenue: 0, transactions: 0 }));
       }
-      
-      const { count: lastMonthCount } = await lastMonthQuery;
 
-      return {
-        thisMonth: thisMonthCount,
-        lastMonth: lastMonthCount || 0,
-        growth: lastMonthCount ? (((thisMonthCount) - lastMonthCount) / lastMonthCount * 100).toFixed(1) : 0
-      };
-    },
-    enabled: !!sh2mData,
-  });
-
-  const stats = [
-    {
-      title: "Client SH2M",
-      value: sh2mData?.total || 0,
-      icon: Users,
-      description: `${sh2mData?.paid || 0} client paid`,
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-    },
-    {
-      title: "Transaksi Highticket",
-      value: highticketData?.total || 0,
-      icon: FileText,
-      description: `${highticketData?.lunas || 0} transaksi lunas`,
-      color: "text-green-500",
-      bgColor: "bg-green-500/10",
-    },
-    {
-      title: "Revenue",
-      value: `Rp ${(highticketData?.totalRevenue || 0).toLocaleString('id-ID')}`,
-      icon: DollarSign,
-      description: "Dari transaksi bulan ini",
-      color: "text-emerald-500",
-      bgColor: "bg-emerald-500/10",
-    },
-    {
-      title: "vs Bulan Lalu",
-      value: `${Number(monthlyStats?.growth) > 0 ? '+' : ''}${monthlyStats?.growth || 0}%`,
-      icon: TrendingUp,
-      description: `${monthlyStats?.lastMonth || 0} client bulan lalu`,
-      color: Number(monthlyStats?.growth) >= 0 ? "text-green-500" : "text-red-500",
-      bgColor: Number(monthlyStats?.growth) >= 0 ? "bg-green-500/10" : "bg-red-500/10",
-    },
-  ];
-
-  // Get EC performance for selected month
-  const { data: ecPerformance } = useQuery({
-    queryKey: ["dashboard-ec-performance", branchFilter, startDate, endDate],
-    queryFn: async () => {
       let query = supabase
-        .from("sh2m_data")
-        .select("nama_ec, status_payment")
-        .gte("tanggal", startDate)
-        .lte("tanggal", endDate);
+        .from("highticket_data")
+        .select("tanggal_transaksi, harga")
+        .gte("tanggal_transaksi", yearStartDate)
+        .lte("tanggal_transaksi", yearEndDate);
       
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
+      if (branchFilter && clientIds && clientIds.length > 0) {
+        query = query.in("client_id", clientIds);
       }
+      
       const { data, error } = await query;
       if (error) throw error;
 
-      const ecStats: Record<string, { total: number; paid: number }> = {};
-      data?.forEach(d => {
-        const ec = d.nama_ec || 'Tidak ada EC';
-        if (!ecStats[ec]) {
-          ecStats[ec] = { total: 0, paid: 0 };
-        }
-        ecStats[ec].total++;
-        if (d.status_payment === 'paid') {
-          ecStats[ec].paid++;
-        }
+      // Group by month
+      const monthlyData: Record<number, { revenue: number; transactions: number }> = {};
+      for (let i = 0; i < 12; i++) {
+        monthlyData[i] = { revenue: 0, transactions: 0 };
+      }
+
+      data?.forEach(tx => {
+        const month = parseISO(tx.tanggal_transaksi).getMonth();
+        monthlyData[month].revenue += tx.harga || 0;
+        monthlyData[month].transactions++;
       });
 
-      return Object.entries(ecStats)
-        .map(([name, stats]) => ({
-          name,
-          total: stats.total,
-          paid: stats.paid,
-          rate: stats.total > 0 ? ((stats.paid / stats.total) * 100).toFixed(1) : 0
-        }))
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 5);
+      return months.map(m => ({
+        name: m.label.substring(0, 3),
+        revenue: monthlyData[m.value].revenue,
+        transactions: monthlyData[m.value].transactions,
+      }));
     },
   });
 
-  // Get recent highticket transactions for selected month
-  const { data: recentTransactions } = useQuery({
-    queryKey: ["dashboard-recent-transactions", branchFilter, startDate, endDate],
+  // Get Weekly Revenue for the selected month (for weekly chart)
+  const { data: weeklyRevenueData } = useQuery({
+    queryKey: ["dashboard-weekly-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      let clientQuery = supabase.from("sh2m_data").select("client_id");
-      if (branchFilter) {
-        clientQuery = clientQuery.eq("asal_iklan", branchFilter);
+      const clientIds = await getClientIds();
+      
+      const weeks = eachWeekOfInterval(
+        { start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) },
+        { weekStartsOn: 1 }
+      );
+
+      if (branchFilter && clientIds && clientIds.length === 0) {
+        return weeks.map((_, i) => ({ name: `Minggu ${i + 1}`, revenue: 0, transactions: 0 }));
       }
-      const { data: sh2mClients } = await clientQuery;
-      const clientIds = sh2mClients?.map(c => c.client_id) || [];
 
       let query = supabase
         .from("highticket_data")
-        .select("*")
-        .gte("tanggal_transaksi", startDate)
-        .lte("tanggal_transaksi", endDate)
-        .order("created_at", { ascending: false })
-        .limit(5);
+        .select("tanggal_transaksi, harga")
+        .gte("tanggal_transaksi", monthStartDate)
+        .lte("tanggal_transaksi", monthEndDate);
       
-      if (branchFilter && clientIds.length > 0) {
+      if (branchFilter && clientIds && clientIds.length > 0) {
         query = query.in("client_id", clientIds);
       }
-
+      
       const { data, error } = await query;
       if (error) throw error;
-      return data;
+
+      return weeks.map((weekStart, i) => {
+        const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+        const weekRevenue = data?.filter(tx => {
+          const txDate = parseISO(tx.tanggal_transaksi);
+          return txDate >= weekStart && txDate <= weekEnd;
+        }).reduce((sum, tx) => sum + (tx.harga || 0), 0) || 0;
+        
+        const weekTransactions = data?.filter(tx => {
+          const txDate = parseISO(tx.tanggal_transaksi);
+          return txDate >= weekStart && txDate <= weekEnd;
+        }).length || 0;
+
+        return {
+          name: `Minggu ${i + 1}`,
+          revenue: weekRevenue,
+          transactions: weekTransactions,
+        };
+      });
     },
   });
+
+  // Get Daily Revenue for the selected month (for daily chart)
+  const { data: dailyRevenueData } = useQuery({
+    queryKey: ["dashboard-daily-revenue", branchFilter, monthStartDate, monthEndDate],
+    queryFn: async () => {
+      const clientIds = await getClientIds();
+      
+      const days = eachDayOfInterval({
+        start: startOfMonth(selectedDate),
+        end: endOfMonth(selectedDate),
+      });
+
+      if (branchFilter && clientIds && clientIds.length === 0) {
+        return days.map(day => ({ name: format(day, 'd'), revenue: 0 }));
+      }
+
+      let query = supabase
+        .from("highticket_data")
+        .select("tanggal_transaksi, harga")
+        .gte("tanggal_transaksi", monthStartDate)
+        .lte("tanggal_transaksi", monthEndDate);
+      
+      if (branchFilter && clientIds && clientIds.length > 0) {
+        query = query.in("client_id", clientIds);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+
+      return days.map(day => {
+        const dayStr = format(day, 'yyyy-MM-dd');
+        const dayRevenue = data?.filter(tx => tx.tanggal_transaksi === dayStr)
+          .reduce((sum, tx) => sum + (tx.harga || 0), 0) || 0;
+
+        return {
+          name: format(day, 'd'),
+          revenue: dayRevenue,
+        };
+      });
+    },
+  });
+
+  // Get Sales Trend (transactions count per day for selected month)
+  const { data: salesTrendData } = useQuery({
+    queryKey: ["dashboard-sales-trend", branchFilter, monthStartDate, monthEndDate],
+    queryFn: async () => {
+      const clientIds = await getClientIds();
+      
+      const days = eachDayOfInterval({
+        start: startOfMonth(selectedDate),
+        end: endOfMonth(selectedDate),
+      });
+
+      if (branchFilter && clientIds && clientIds.length === 0) {
+        return days.map(day => ({ name: format(day, 'd'), sales: 0 }));
+      }
+
+      let query = supabase
+        .from("highticket_data")
+        .select("tanggal_transaksi")
+        .gte("tanggal_transaksi", monthStartDate)
+        .lte("tanggal_transaksi", monthEndDate);
+      
+      if (branchFilter && clientIds && clientIds.length > 0) {
+        query = query.in("client_id", clientIds);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+
+      return days.map(day => {
+        const dayStr = format(day, 'yyyy-MM-dd');
+        const salesCount = data?.filter(tx => tx.tanggal_transaksi === dayStr).length || 0;
+
+        return {
+          name: format(day, 'd'),
+          sales: salesCount,
+        };
+      });
+    },
+  });
+
+  // Get monthly revenue for selected month
+  const { data: currentMonthRevenue } = useQuery({
+    queryKey: ["dashboard-current-month-revenue", branchFilter, monthStartDate, monthEndDate],
+    queryFn: async () => {
+      const clientIds = await getClientIds();
+      
+      if (branchFilter && clientIds && clientIds.length === 0) {
+        return 0;
+      }
+
+      let query = supabase
+        .from("highticket_data")
+        .select("harga")
+        .gte("tanggal_transaksi", monthStartDate)
+        .lte("tanggal_transaksi", monthEndDate);
+      
+      if (branchFilter && clientIds && clientIds.length > 0) {
+        query = query.in("client_id", clientIds);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      return data?.reduce((sum, d) => sum + (d.harga || 0), 0) || 0;
+    },
+  });
+
+  const formatCurrency = (value: number) => {
+    if (value >= 1000000000) {
+      return `${(value / 1000000000).toFixed(1)}M`;
+    } else if (value >= 1000000) {
+      return `${(value / 1000000).toFixed(1)}Jt`;
+    } else if (value >= 1000) {
+      return `${(value / 1000).toFixed(0)}rb`;
+    }
+    return value.toString();
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-popover border rounded-lg p-3 shadow-lg">
+          <p className="font-medium">{label}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} className="text-sm" style={{ color: entry.color }}>
+              {entry.name === 'revenue' ? 'Revenue' : entry.name === 'sales' ? 'Transaksi' : entry.name}: {
+                entry.name === 'revenue' 
+                  ? `Rp ${entry.value.toLocaleString('id-ID')}` 
+                  : entry.value
+              }
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-6">
@@ -273,98 +373,155 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {stat.title}
-              </CardTitle>
-              <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                <stat.icon className={`h-4 w-4 ${stat.color}`} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
+      {/* Revenue Cards */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* EC Performance */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Revenue (All Time)
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-emerald-500/10">
+              <DollarSign className="h-4 w-4 text-emerald-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Rp {(totalRevenue || 0).toLocaleString('id-ID')}</div>
+            <p className="text-xs text-muted-foreground mt-1">Semua transaksi {selectedBranch}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Revenue {months[selectedMonth].label} {selectedYear}
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-blue-500/10">
+              <Calendar className="h-4 w-4 text-blue-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Rp {(currentMonthRevenue || 0).toLocaleString('id-ID')}</div>
+            <p className="text-xs text-muted-foreground mt-1">Bulan ini</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Monthly Revenue Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Monthly Revenue {selectedYear}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyRevenueData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="name" className="text-xs" />
+                <YAxis tickFormatter={formatCurrency} className="text-xs" />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar 
+                  dataKey="revenue" 
+                  fill="hsl(var(--primary))" 
+                  radius={[4, 4, 0, 0]}
+                  name="revenue"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Weekly and Daily Charts */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Weekly Revenue Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserCheck className="h-5 w-5" />
-              Performa EC (Top 5)
+            <CardTitle className="text-base">
+              Weekly Revenue - {months[selectedMonth].label} {selectedYear}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {ecPerformance?.length === 0 ? (
-                <p className="text-muted-foreground text-sm">Belum ada data</p>
-              ) : (
-                ecPerformance?.map((ec, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{ec.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {ec.paid} paid dari {ec.total} client
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-sm font-medium ${
-                        Number(ec.rate) >= 50 ? 'text-green-500' : 'text-yellow-500'
-                      }`}>
-                        {ec.rate}%
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weeklyRevenueData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="name" className="text-xs" />
+                  <YAxis tickFormatter={formatCurrency} className="text-xs" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar 
+                    dataKey="revenue" 
+                    fill="hsl(var(--chart-2))" 
+                    radius={[4, 4, 0, 0]}
+                    name="revenue"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
 
-        {/* Recent Transactions */}
+        {/* Daily Revenue Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Transaksi Terbaru
+            <CardTitle className="text-base">
+              Daily Revenue - {months[selectedMonth].label} {selectedYear}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentTransactions?.length === 0 ? (
-                <p className="text-muted-foreground text-sm">Belum ada transaksi</p>
-              ) : (
-                recentTransactions?.map((tx, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{tx.nama}</p>
-                      <p className="text-sm text-muted-foreground">{tx.nama_program}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">Rp {tx.harga.toLocaleString('id-ID')}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        tx.status_payment === 'Lunas' 
-                          ? 'bg-green-500/10 text-green-500' 
-                          : 'bg-yellow-500/10 text-yellow-500'
-                      }`}>
-                        {tx.status_payment}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dailyRevenueData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="name" className="text-xs" interval="preserveStartEnd" />
+                  <YAxis tickFormatter={formatCurrency} className="text-xs" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area 
+                    type="monotone" 
+                    dataKey="revenue" 
+                    stroke="hsl(var(--chart-3))" 
+                    fill="hsl(var(--chart-3))" 
+                    fillOpacity={0.3}
+                    name="revenue"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Sales Trend Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Sales Trend - {months[selectedMonth].label} {selectedYear}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={salesTrendData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="name" className="text-xs" interval="preserveStartEnd" />
+                <YAxis className="text-xs" />
+                <Tooltip content={<CustomTooltip />} />
+                <Line 
+                  type="monotone" 
+                  dataKey="sales" 
+                  stroke="hsl(var(--chart-4))" 
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--chart-4))", strokeWidth: 2, r: 3 }}
+                  activeDot={{ r: 5 }}
+                  name="sales"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
