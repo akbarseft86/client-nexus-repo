@@ -134,6 +134,8 @@ export default function SH2MData() {
   const [filterEC, setFilterEC] = useState("");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
@@ -332,11 +334,20 @@ export default function SH2MData() {
     },
   });
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    setSelectedFile(file || null);
+  };
 
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      toast.error("Pilih file terlebih dahulu");
+      return;
+    }
+
+    setIsUploading(true);
     try {
+      const file = selectedFile;
       const data = await file.arrayBuffer();
       // Handle CSV with custom delimiter (semicolon)
       const workbook = XLSX.read(data, { type: 'array', FS: ';' });
@@ -445,9 +456,12 @@ export default function SH2MData() {
       toast.success(message);
       queryClient.invalidateQueries({ queryKey: ["sh2m-data"] });
       setUploadDialogOpen(false);
+      setSelectedFile(null);
     } catch (error) {
       console.error(error);
       toast.error("Gagal mengupload file");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -502,7 +516,10 @@ export default function SH2MData() {
             <Trash2 className="mr-2 h-4 w-4" />
             Hapus Semua Data
           </Button>
-          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+          <Dialog open={uploadDialogOpen} onOpenChange={(open) => {
+            setUploadDialogOpen(open);
+            if (!open) setSelectedFile(null);
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Upload className="mr-2 h-4 w-4" />
@@ -520,12 +537,24 @@ export default function SH2MData() {
                     id="file"
                     type="file"
                     accept=".xlsx,.xls,.csv"
-                    onChange={handleFileUpload}
+                    onChange={handleFileSelect}
                   />
+                  {selectedFile && (
+                    <p className="text-sm text-primary mt-2">
+                      File dipilih: {selectedFile.name}
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground mt-2">
                     Kolom yang diperlukan: tanggal, nama_client, nohp_client, source_iklan, asal_iklan, nama_ec, keterangan
                   </p>
                 </div>
+                <Button 
+                  onClick={handleFileUpload} 
+                  disabled={!selectedFile || isUploading}
+                  className="w-full"
+                >
+                  {isUploading ? "Mengupload..." : "Submit"}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
