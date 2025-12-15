@@ -141,7 +141,6 @@ export default function SH2MData() {
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
-  const [normalizeConfirm, setNormalizeConfirm] = useState(false);
   
   const { getBranchFilter, selectedBranch } = useBranch();
   const branchFilter = getBranchFilter();
@@ -287,60 +286,6 @@ export default function SH2MData() {
     return normalized;
   };
 
-  const normalizeAllPhonesMutation = useMutation({
-    mutationFn: async () => {
-      // Fetch all data
-      const { data: allData, error: fetchError } = await supabase
-        .from("sh2m_data")
-        .select("*");
-      
-      if (fetchError) throw fetchError;
-      if (!allData || allData.length === 0) {
-        throw new Error("Tidak ada data untuk dinormalisasi");
-      }
-
-      let updatedCount = 0;
-      const errors: string[] = [];
-
-      // Process each row
-      for (const row of allData) {
-        const normalizedPhone = normalizePhoneNumber(row.nohp_client);
-        
-        // Only update if phone number changed
-        if (normalizedPhone !== row.nohp_client) {
-          const { error: updateError } = await supabase
-            .from("sh2m_data")
-            .update({ nohp_client: normalizedPhone })
-            .eq("id", row.id);
-          
-          if (updateError) {
-            errors.push(`Error updating ${row.client_id}: ${updateError.message}`);
-          } else {
-            updatedCount++;
-          }
-        }
-      }
-
-      if (errors.length > 0) {
-        console.error("Normalization errors:", errors);
-      }
-
-      return { updatedCount, totalRows: allData.length, errors };
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["sh2m-data"] });
-      if (result.updatedCount > 0) {
-        toast.success(`${result.updatedCount} nomor HP berhasil dinormalisasi dari ${result.totalRows} data`);
-      } else {
-        toast.info("Semua nomor HP sudah dalam format yang benar");
-      }
-      setNormalizeConfirm(false);
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Gagal normalisasi nomor HP");
-      setNormalizeConfirm(false);
-    },
-  });
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -565,13 +510,6 @@ export default function SH2MData() {
           {/* These buttons are hidden in preview mode (SEFT ALL) */}
           {!isPreviewMode && (
             <>
-              <Button
-                variant="outline"
-                onClick={() => setNormalizeConfirm(true)}
-                disabled={normalizeAllPhonesMutation.isPending}
-              >
-                Normalisasi No HP
-              </Button>
               <Button
                 variant="destructive"
                 onClick={() => setDeleteAllConfirm(true)}
@@ -972,28 +910,6 @@ export default function SH2MData() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Normalize Phone Numbers Confirmation */}
-      <AlertDialog open={normalizeConfirm} onOpenChange={setNormalizeConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Konfirmasi Normalisasi Nomor HP</AlertDialogTitle>
-            <AlertDialogDescription>
-              Apakah Anda yakin ingin menormalisasi semua nomor HP di database? 
-              Proses ini akan mengubah format nomor HP yang menggunakan scientific notation (contoh: 6.28524E+12) 
-              menjadi format lengkap (628524...). Total data: {sh2mData?.length || 0} baris.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => normalizeAllPhonesMutation.mutate()}
-              disabled={normalizeAllPhonesMutation.isPending}
-            >
-              {normalizeAllPhonesMutation.isPending ? "Memproses..." : "Ya, Normalisasi"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
