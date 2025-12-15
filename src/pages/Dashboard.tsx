@@ -1,34 +1,71 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBranch } from "@/contexts/BranchContext";
 import { Users, FileText, CreditCard, TrendingUp, DollarSign, UserCheck } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, setMonth, setYear } from "date-fns";
 import { id } from "date-fns/locale";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Dashboard() {
   const { getBranchFilter, selectedBranch } = useBranch();
   const branchFilter = getBranchFilter();
+  
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  
+  const selectedDate = setYear(setMonth(new Date(), selectedMonth), selectedYear);
+  const startDate = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
+  const endDate = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
+  
+  const months = [
+    { value: 0, label: "Januari" },
+    { value: 1, label: "Februari" },
+    { value: 2, label: "Maret" },
+    { value: 3, label: "April" },
+    { value: 4, label: "Mei" },
+    { value: 5, label: "Juni" },
+    { value: 6, label: "Juli" },
+    { value: 7, label: "Agustus" },
+    { value: 8, label: "September" },
+    { value: 9, label: "Oktober" },
+    { value: 10, label: "November" },
+    { value: 11, label: "Desember" },
+  ];
+  
+  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-  // Get SH2M data count
+  // Get SH2M data count for selected month
   const { data: sh2mData } = useQuery({
-    queryKey: ["dashboard-sh2m", branchFilter],
+    queryKey: ["dashboard-sh2m", branchFilter, startDate, endDate],
     queryFn: async () => {
-      let query = supabase.from("sh2m_data").select("*", { count: "exact" });
+      let query = supabase
+        .from("sh2m_data")
+        .select("*")
+        .gte("tanggal", startDate)
+        .lte("tanggal", endDate);
+      
       if (branchFilter) {
         query = query.eq("asal_iklan", branchFilter);
       }
-      const { data, count, error } = await query;
+      const { data, error } = await query;
       if (error) throw error;
       
       const paidCount = data?.filter(d => d.status_payment === 'paid').length || 0;
-      return { total: count || 0, paid: paidCount, data };
+      return { total: data?.length || 0, paid: paidCount, data };
     },
   });
 
-  // Get Highticket data
+  // Get Highticket data for selected month
   const { data: highticketData } = useQuery({
-    queryKey: ["dashboard-highticket", branchFilter],
+    queryKey: ["dashboard-highticket", branchFilter, startDate, endDate],
     queryFn: async () => {
       // First get client_ids from sh2m_data filtered by branch
       let clientQuery = supabase.from("sh2m_data").select("client_id");
@@ -44,7 +81,12 @@ export default function Dashboard() {
         return { total: 0, totalRevenue: 0, lunas: 0, data: [] };
       }
 
-      let query = supabase.from("highticket_data").select("*");
+      let query = supabase
+        .from("highticket_data")
+        .select("*")
+        .gte("tanggal_transaksi", startDate)
+        .lte("tanggal_transaksi", endDate);
+      
       if (branchFilter && clientIds.length > 0) {
         query = query.in("client_id", clientIds);
       }
@@ -59,28 +101,16 @@ export default function Dashboard() {
     },
   });
 
-  // Get this month's stats
+  // Get comparison with previous month
   const { data: monthlyStats } = useQuery({
-    queryKey: ["dashboard-monthly", branchFilter],
+    queryKey: ["dashboard-monthly", branchFilter, startDate, endDate],
     queryFn: async () => {
-      const now = new Date();
-      const startOfThisMonth = format(startOfMonth(now), 'yyyy-MM-dd');
-      const endOfThisMonth = format(endOfMonth(now), 'yyyy-MM-dd');
-      const startOfLastMonth = format(startOfMonth(subMonths(now, 1)), 'yyyy-MM-dd');
-      const endOfLastMonth = format(endOfMonth(subMonths(now, 1)), 'yyyy-MM-dd');
+      const prevMonthDate = subMonths(selectedDate, 1);
+      const startOfLastMonth = format(startOfMonth(prevMonthDate), 'yyyy-MM-dd');
+      const endOfLastMonth = format(endOfMonth(prevMonthDate), 'yyyy-MM-dd');
 
-      // This month SH2M
-      let thisMonthQuery = supabase
-        .from("sh2m_data")
-        .select("*", { count: "exact" })
-        .gte("tanggal", startOfThisMonth)
-        .lte("tanggal", endOfThisMonth);
-      
-      if (branchFilter) {
-        thisMonthQuery = thisMonthQuery.eq("asal_iklan", branchFilter);
-      }
-      
-      const { count: thisMonthCount } = await thisMonthQuery;
+      // This month SH2M (already have from sh2mData)
+      const thisMonthCount = sh2mData?.total || 0;
 
       // Last month SH2M
       let lastMonthQuery = supabase
@@ -96,16 +126,17 @@ export default function Dashboard() {
       const { count: lastMonthCount } = await lastMonthQuery;
 
       return {
-        thisMonth: thisMonthCount || 0,
+        thisMonth: thisMonthCount,
         lastMonth: lastMonthCount || 0,
-        growth: lastMonthCount ? (((thisMonthCount || 0) - lastMonthCount) / lastMonthCount * 100).toFixed(1) : 0
+        growth: lastMonthCount ? (((thisMonthCount) - lastMonthCount) / lastMonthCount * 100).toFixed(1) : 0
       };
     },
+    enabled: !!sh2mData,
   });
 
   const stats = [
     {
-      title: "Total Client SH2M",
+      title: "Client SH2M",
       value: sh2mData?.total || 0,
       icon: Users,
       description: `${sh2mData?.paid || 0} client paid`,
@@ -113,7 +144,7 @@ export default function Dashboard() {
       bgColor: "bg-blue-500/10",
     },
     {
-      title: "Total Transaksi Highticket",
+      title: "Transaksi Highticket",
       value: highticketData?.total || 0,
       icon: FileText,
       description: `${highticketData?.lunas || 0} transaksi lunas`,
@@ -121,28 +152,33 @@ export default function Dashboard() {
       bgColor: "bg-green-500/10",
     },
     {
-      title: "Total Revenue",
+      title: "Revenue",
       value: `Rp ${(highticketData?.totalRevenue || 0).toLocaleString('id-ID')}`,
       icon: DollarSign,
-      description: "Dari semua transaksi",
+      description: "Dari transaksi bulan ini",
       color: "text-emerald-500",
       bgColor: "bg-emerald-500/10",
     },
     {
-      title: "Client Bulan Ini",
-      value: monthlyStats?.thisMonth || 0,
+      title: "vs Bulan Lalu",
+      value: `${Number(monthlyStats?.growth) > 0 ? '+' : ''}${monthlyStats?.growth || 0}%`,
       icon: TrendingUp,
-      description: `${Number(monthlyStats?.growth) > 0 ? '+' : ''}${monthlyStats?.growth}% dari bulan lalu`,
+      description: `${monthlyStats?.lastMonth || 0} client bulan lalu`,
       color: Number(monthlyStats?.growth) >= 0 ? "text-green-500" : "text-red-500",
       bgColor: Number(monthlyStats?.growth) >= 0 ? "bg-green-500/10" : "bg-red-500/10",
     },
   ];
 
-  // Get EC performance
+  // Get EC performance for selected month
   const { data: ecPerformance } = useQuery({
-    queryKey: ["dashboard-ec-performance", branchFilter],
+    queryKey: ["dashboard-ec-performance", branchFilter, startDate, endDate],
     queryFn: async () => {
-      let query = supabase.from("sh2m_data").select("nama_ec, status_payment");
+      let query = supabase
+        .from("sh2m_data")
+        .select("nama_ec, status_payment")
+        .gte("tanggal", startDate)
+        .lte("tanggal", endDate);
+      
       if (branchFilter) {
         query = query.eq("asal_iklan", branchFilter);
       }
@@ -173,9 +209,9 @@ export default function Dashboard() {
     },
   });
 
-  // Get recent highticket transactions
+  // Get recent highticket transactions for selected month
   const { data: recentTransactions } = useQuery({
-    queryKey: ["dashboard-recent-transactions", branchFilter],
+    queryKey: ["dashboard-recent-transactions", branchFilter, startDate, endDate],
     queryFn: async () => {
       let clientQuery = supabase.from("sh2m_data").select("client_id");
       if (branchFilter) {
@@ -187,6 +223,8 @@ export default function Dashboard() {
       let query = supabase
         .from("highticket_data")
         .select("*")
+        .gte("tanggal_transaksi", startDate)
+        .lte("tanggal_transaksi", endDate)
         .order("created_at", { ascending: false })
         .limit(5);
       
@@ -202,10 +240,36 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">{selectedBranch} - {format(new Date(), "MMMM yyyy", { locale: id })}</p>
+          <p className="text-muted-foreground">{selectedBranch}</p>
+        </div>
+        <div className="flex gap-2">
+          <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
+            <SelectTrigger className="w-[140px] bg-popover">
+              <SelectValue placeholder="Pilih bulan" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover z-50">
+              {months.map((month) => (
+                <SelectItem key={month.value} value={month.value.toString()}>
+                  {month.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+            <SelectTrigger className="w-[100px] bg-popover">
+              <SelectValue placeholder="Tahun" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover z-50">
+              {years.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
