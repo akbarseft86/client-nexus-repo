@@ -1,8 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   Table,
@@ -12,13 +10,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { Check, X } from "lucide-react";
 import { useBranch } from "@/contexts/BranchContext";
 
 export default function SourceIklanCategories() {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
   const queryClient = useQueryClient();
   const { selectedBranch, getBranchFilter } = useBranch();
   const branchFilter = getBranchFilter();
@@ -98,26 +100,14 @@ export default function SourceIklanCategories() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["source-iklan-categories"] });
       toast.success("Kategori berhasil diperbarui");
-      setEditingId(null);
-      setEditValue("");
     },
     onError: () => {
       toast.error("Gagal memperbarui kategori");
     },
   });
 
-  const handleEdit = (id: string, currentKategori: string | null) => {
-    setEditingId(id);
-    setEditValue(currentKategori || "");
-  };
-
-  const handleSave = (id: string) => {
-    updateCategoryMutation.mutate({ id, kategori: editValue });
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    setEditValue("");
+  const handleCategoryChange = (id: string, kategori: string) => {
+    updateCategoryMutation.mutate({ id, kategori });
   };
 
   const isLoading = loadingUnique || loadingCategories;
@@ -143,19 +133,18 @@ export default function SourceIklanCategories() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[50%]">Source Iklan</TableHead>
+              <TableHead className="w-[60%]">Source Iklan</TableHead>
               <TableHead className="w-[40%]">Kategori</TableHead>
-              <TableHead className="w-[10%] text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={2} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : filteredCategories?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center">
+                <TableCell colSpan={2} className="text-center">
                   Tidak ada data source iklan untuk cabang {getBranchName()}
                 </TableCell>
               </TableRow>
@@ -164,52 +153,18 @@ export default function SourceIklanCategories() {
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">{row.source_iklan}</TableCell>
                   <TableCell>
-                    {editingId === row.id ? (
-                      <Input
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        placeholder="Masukkan kategori"
-                        className="max-w-md"
-                        autoFocus
-                      />
-                    ) : (
-                      <div 
-                        className="cursor-pointer hover:bg-muted px-2 py-1 rounded"
-                        onClick={() => handleEdit(row.id, row.kategori)}
-                      >
-                        {row.kategori || <span className="text-muted-foreground italic">Klik untuk menambah kategori</span>}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {editingId === row.id ? (
-                      <div className="flex gap-1 justify-end">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleSave(row.id)}
-                          disabled={updateCategoryMutation.isPending}
-                        >
-                          <Check className="h-4 w-4 text-success" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={handleCancel}
-                          disabled={updateCategoryMutation.isPending}
-                        >
-                          <X className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(row.id, row.kategori)}
-                      >
-                        Edit
-                      </Button>
-                    )}
+                    <Select
+                      value={row.kategori || ""}
+                      onValueChange={(value) => handleCategoryChange(row.id, value)}
+                    >
+                      <SelectTrigger className="w-40 bg-popover">
+                        <SelectValue placeholder="Pilih kategori" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover z-50">
+                        <SelectItem value="Abundance">Abundance</SelectItem>
+                        <SelectItem value="Healing">Healing</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                 </TableRow>
               ))
