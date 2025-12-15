@@ -4,7 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, Plus, Filter, Trash2, Download } from "lucide-react";
+import { Upload, Plus, Filter, Trash2, Download, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -500,158 +506,168 @@ export default function SH2MData() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          {/* Download button - always visible */}
-          <Button variant="outline" onClick={handleDownloadData}>
-            <Download className="mr-2 h-4 w-4" />
-            Download Data
-          </Button>
-          
-          {/* These buttons are hidden in preview mode (SEFT ALL) */}
-          {!isPreviewMode && (
-            <>
-              <Button
-                variant="destructive"
-                onClick={() => setDeleteAllConfirm(true)}
-                disabled={deleteAllMutation.isPending}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Hapus Semua Data
-              </Button>
-              <Dialog open={uploadDialogOpen} onOpenChange={(open) => {
-                setUploadDialogOpen(open);
-                if (!open) setSelectedFile(null);
-              }}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload File
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Upload Data dari File</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="file">Pilih File (Excel/CSV)</Label>
-                      <Input
-                        id="file"
-                        type="file"
-                        accept=".xlsx,.xls,.csv"
-                        onChange={handleFileSelect}
-                      />
-                      {selectedFile && (
-                        <p className="text-sm text-primary mt-2">
-                          File dipilih: {selectedFile.name}
-                        </p>
-                      )}
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Kolom yang diperlukan: tanggal, nama_client, nohp_client, source_iklan, asal_iklan, nama_ec, keterangan
-                      </p>
-                    </div>
-                    {isUploading && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>Progress Upload</span>
-                          <span className="font-medium">{uploadProgress}%</span>
-                        </div>
-                        <div className="w-full bg-secondary rounded-full h-2.5">
-                          <div 
-                            className="bg-primary h-2.5 rounded-full transition-all duration-300" 
-                            style={{ width: `${uploadProgress}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    <Button 
-                      onClick={handleFileUpload} 
-                      disabled={!selectedFile || isUploading}
-                      className="w-full"
-                    >
-                      {isUploading ? `Mengupload... ${uploadProgress}%` : "Submit"}
-                    </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">
+              <MoreHorizontal className="mr-2 h-4 w-4" />
+              Aksi
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 bg-popover z-50">
+            <DropdownMenuItem onClick={handleDownloadData} className="cursor-pointer">
+              <Download className="mr-2 h-4 w-4" />
+              Download Data
+            </DropdownMenuItem>
+            {!isPreviewMode && (
+              <>
+                <DropdownMenuItem 
+                  onClick={() => setUploadDialogOpen(true)} 
+                  className="cursor-pointer"
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload File
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setManualDialogOpen(true)} 
+                  className="cursor-pointer"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Tambah Manual
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setDeleteAllConfirm(true)} 
+                  className="cursor-pointer text-destructive focus:text-destructive"
+                  disabled={deleteAllMutation.isPending}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Hapus Semua Data
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        
+        {/* Upload Dialog */}
+        <Dialog open={uploadDialogOpen} onOpenChange={(open) => {
+          setUploadDialogOpen(open);
+          if (!open) setSelectedFile(null);
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Upload Data dari File</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="file">Pilih File (Excel/CSV)</Label>
+                <Input
+                  id="file"
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileSelect}
+                />
+                {selectedFile && (
+                  <p className="text-sm text-primary mt-2">
+                    File dipilih: {selectedFile.name}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground mt-2">
+                  Kolom yang diperlukan: tanggal, nama_client, nohp_client, source_iklan, asal_iklan, nama_ec, keterangan
+                </p>
+              </div>
+              {isUploading && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Progress Upload</span>
+                    <span className="font-medium">{uploadProgress}%</span>
                   </div>
-                </DialogContent>
-              </Dialog>
-              
-              <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Tambah Manual
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Tambah Data Manual</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={(e) => {
-                    e.preventDefault();
-                    handleManualAdd(new FormData(e.currentTarget));
-                  }} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="tanggal">Tanggal</Label>
-                        <Input id="tanggal" name="tanggal" type="date" required />
-                      </div>
-                      <div>
-                        <Label htmlFor="jam">Jam</Label>
-                        <Input id="jam" name="jam" placeholder="HH.mm" />
-                      </div>
-                      <div>
-                        <Label htmlFor="nama_client">Nama Client</Label>
-                        <Input id="nama_client" name="nama_client" required />
-                      </div>
-                      <div>
-                        <Label htmlFor="nohp_client">No HP Client</Label>
-                        <Input id="nohp_client" name="nohp_client" required />
-                      </div>
-                      <div>
-                        <Label htmlFor="source_iklan">Source Iklan</Label>
-                        <Input id="source_iklan" name="source_iklan" required />
-                      </div>
-                      <div>
-                        <Label htmlFor="asal_iklan">Asal Iklan</Label>
-                        <Input id="asal_iklan" name="asal_iklan" />
-                      </div>
-                      <div>
-                        <Label htmlFor="nama_ec">Nama EC</Label>
-                        <Select name="nama_ec">
-                          <SelectTrigger>
-                            <SelectValue placeholder="Pilih EC" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {EC_OPTIONS.map((ec) => (
-                              <SelectItem key={ec} value={ec}>{ec}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="status_payment">Status Payment</Label>
-                        <Select name="status_payment" defaultValue="unpaid">
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="paid">Paid</SelectItem>
-                            <SelectItem value="unpaid">Unpaid</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-2">
-                        <Label htmlFor="keterangan">Keterangan</Label>
-                        <Input id="keterangan" name="keterangan" />
-                      </div>
-                    </div>
-                    <Button type="submit" className="w-full">Tambah Data</Button>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-        </div>
+                  <div className="w-full bg-secondary rounded-full h-2.5">
+                    <div 
+                      className="bg-primary h-2.5 rounded-full transition-all duration-300" 
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              <Button 
+                onClick={handleFileUpload} 
+                disabled={!selectedFile || isUploading}
+                className="w-full"
+              >
+                {isUploading ? `Mengupload... ${uploadProgress}%` : "Submit"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Manual Add Dialog */}
+        <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Tambah Data Manual</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              handleManualAdd(new FormData(e.currentTarget));
+            }} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="tanggal">Tanggal</Label>
+                  <Input id="tanggal" name="tanggal" type="date" required />
+                </div>
+                <div>
+                  <Label htmlFor="jam">Jam</Label>
+                  <Input id="jam" name="jam" placeholder="HH.mm" />
+                </div>
+                <div>
+                  <Label htmlFor="nama_client">Nama Client</Label>
+                  <Input id="nama_client" name="nama_client" required />
+                </div>
+                <div>
+                  <Label htmlFor="nohp_client">No HP Client</Label>
+                  <Input id="nohp_client" name="nohp_client" required />
+                </div>
+                <div>
+                  <Label htmlFor="source_iklan">Source Iklan</Label>
+                  <Input id="source_iklan" name="source_iklan" required />
+                </div>
+                <div>
+                  <Label htmlFor="asal_iklan">Asal Iklan</Label>
+                  <Input id="asal_iklan" name="asal_iklan" />
+                </div>
+                <div>
+                  <Label htmlFor="nama_ec">Nama EC</Label>
+                  <Select name="nama_ec">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih EC" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EC_OPTIONS.map((ec) => (
+                        <SelectItem key={ec} value={ec}>{ec}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="status_payment">Status Payment</Label>
+                  <Select name="status_payment" defaultValue="unpaid">
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="unpaid">Unpaid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="keterangan">Keterangan</Label>
+                  <Input id="keterangan" name="keterangan" />
+                </div>
+              </div>
+              <Button type="submit" className="w-full">Tambah Data</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card className="p-4">
