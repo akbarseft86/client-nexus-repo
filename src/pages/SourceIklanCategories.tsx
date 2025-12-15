@@ -53,8 +53,8 @@ export default function SourceIklanCategories() {
   });
 
   // Get existing categories
-  const { data: categories, isLoading: loadingCategories } = useQuery({
-    queryKey: ["source-iklan-categories"],
+  const { data: categories, isLoading: loadingCategories, refetch: refetchCategories } = useQuery({
+    queryKey: ["source-iklan-categories", selectedBranch],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("source_iklan_categories")
@@ -73,23 +73,32 @@ export default function SourceIklanCategories() {
 
   // Sync unique source_iklan with categories table
   useEffect(() => {
-    if (uniqueSourceIklan && categories) {
-      const existingSourceIklan = categories.map(c => c.source_iklan);
-      const missingSourceIklan = uniqueSourceIklan.filter(
-        source => !existingSourceIklan.includes(source)
-      );
+    const syncCategories = async () => {
+      if (uniqueSourceIklan && categories) {
+        const existingSourceIklan = categories.map(c => c.source_iklan);
+        const missingSourceIklan = uniqueSourceIklan.filter(
+          source => !existingSourceIklan.includes(source)
+        );
 
-      if (missingSourceIklan.length > 0) {
-        // Insert missing source_iklan
-        missingSourceIklan.forEach(async (source) => {
+        if (missingSourceIklan.length > 0) {
+          // Insert all missing source_iklan at once
+          const insertData = missingSourceIklan.map(source => ({
+            source_iklan: source,
+            kategori: null
+          }));
+          
           await supabase
             .from("source_iklan_categories")
-            .insert({ source_iklan: source, kategori: null });
-        });
-        queryClient.invalidateQueries({ queryKey: ["source-iklan-categories"] });
+            .upsert(insertData, { onConflict: 'source_iklan', ignoreDuplicates: true });
+          
+          // Refetch categories after inserting
+          refetchCategories();
+        }
       }
-    }
-  }, [uniqueSourceIklan, categories, queryClient]);
+    };
+    
+    syncCategories();
+  }, [uniqueSourceIklan, categories, refetchCategories]);
 
   const updateCategoryMutation = useMutation({
     mutationFn: async ({ id, kategori }: { id: string; kategori: string }) => {
