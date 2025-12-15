@@ -27,17 +27,20 @@ export default function SourceIklanCategories() {
 
   // Get unique source_iklan from sh2m_data filtered by branch
   const { data: uniqueSourceIklan, isLoading: loadingUnique } = useQuery({
-    queryKey: ["unique-source-iklan", branchFilter],
+    queryKey: ["unique-source-iklan", selectedBranch],
     queryFn: async () => {
       let query = supabase
         .from("sh2m_data")
         .select("source_iklan")
         .order("source_iklan");
       
-      // Filter by branch if not SEFT ALL
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
+      // Filter by branch - use selectedBranch to determine the correct asal_iklan value
+      if (selectedBranch === "SEFT Bekasi") {
+        query = query.eq("asal_iklan", "SEFT Corp - Bekasi");
+      } else if (selectedBranch === "SEFT Jogja") {
+        query = query.eq("asal_iklan", "SEFT Corp - Jogja");
       }
+      // If SEFT ALL, don't filter - show all source_iklan
       
       const { data, error } = await query;
       
