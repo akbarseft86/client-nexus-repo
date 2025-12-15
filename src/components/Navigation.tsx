@@ -1,4 +1,4 @@
-import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard } from "lucide-react";
+import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,11 +29,16 @@ export default function Navigation() {
     { to: "/search", icon: Search, label: "Pencarian Client", hideInPreview: false },
     { to: "/source-categories", icon: Tags, label: "Kategori Source Iklan", hideInPreview: true },
     { to: "/leads-ec", icon: UserCheck, label: "Leads EC", hideInPreview: false },
+    { to: "/data-duplikat", icon: AlertTriangle, label: "Data Duplikat", showOnlyInPreview: true },
   ];
 
-  const visibleMenuItems = isPreviewMode 
-    ? menuItems.filter(item => !item.hideInPreview)
-    : menuItems;
+  const visibleMenuItems = menuItems.filter(item => {
+    // Hide items marked hideInPreview when in preview mode
+    if (isPreviewMode && item.hideInPreview) return false;
+    // Show items marked showOnlyInPreview only in preview mode
+    if (!isPreviewMode && (item as any).showOnlyInPreview) return false;
+    return true;
+  });
 
   return (
     <nav className="border-b bg-card">
