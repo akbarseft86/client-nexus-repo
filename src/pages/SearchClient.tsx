@@ -13,20 +13,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useBranch } from "@/contexts/BranchContext";
 
 export default function SearchClient() {
   const [searchQuery, setSearchQuery] = useState("");
+  const { getBranchFilter } = useBranch();
+  const branchFilter = getBranchFilter();
 
   const { data: sh2mResults } = useQuery({
-    queryKey: ["search-sh2m", searchQuery],
+    queryKey: ["search-sh2m", searchQuery, branchFilter],
     queryFn: async () => {
       if (!searchQuery) return [];
       
-      const { data, error } = await supabase
+      let query = supabase
         .from("sh2m_data")
         .select("*")
         .or(`client_id.ilike.%${searchQuery}%,nama_client.ilike.%${searchQuery}%,nohp_client.ilike.%${searchQuery}%`);
       
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
@@ -34,7 +42,7 @@ export default function SearchClient() {
   });
 
   const { data: highticketResults } = useQuery({
-    queryKey: ["search-highticket", searchQuery],
+    queryKey: ["search-highticket", searchQuery, branchFilter],
     queryFn: async () => {
       if (!searchQuery || !sh2mResults || sh2mResults.length === 0) return [];
       

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { format, parseISO, isValid } from "date-fns";
 import { id } from "date-fns/locale";
+import { useBranch } from "@/contexts/BranchContext";
 
 const formatPelaksanaanProgram = (value: string | null): string => {
   if (!value) return '-';
@@ -77,29 +78,58 @@ export default function HighticketData() {
   const [filterNamaEC, setFilterNamaEC] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   
+  const { getBranchFilter } = useBranch();
+  const branchFilter = getBranchFilter();
+  
   const queryClient = useQueryClient();
 
   const { data: highticketData, isLoading } = useQuery({
-    queryKey: ["highticket-data"],
+    queryKey: ["highticket-data", branchFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First get client_ids from sh2m_data filtered by branch
+      let clientQuery = supabase.from("sh2m_data").select("client_id");
+      if (branchFilter) {
+        clientQuery = clientQuery.eq("asal_iklan", branchFilter);
+      }
+      const { data: sh2mClients, error: sh2mError } = await clientQuery;
+      if (sh2mError) throw sh2mError;
+      
+      const clientIds = sh2mClients?.map(c => c.client_id) || [];
+      
+      // If branch filter is active and no clients found, return empty
+      if (branchFilter && clientIds.length === 0) {
+        return [];
+      }
+
+      let query = supabase
         .from("highticket_data")
         .select("*")
         .order("tanggal_transaksi", { ascending: false });
       
+      // Filter by client_ids from branch
+      if (branchFilter && clientIds.length > 0) {
+        query = query.in("client_id", clientIds);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
   });
 
   const { data: clients } = useQuery({
-    queryKey: ["sh2m-clients"],
+    queryKey: ["sh2m-clients", branchFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("sh2m_data")
-        .select("client_id, nama_client, nohp_client")
+        .select("client_id, nama_client, nohp_client, tanggal")
         .order("nama_client");
       
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
