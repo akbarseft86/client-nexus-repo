@@ -22,7 +22,7 @@ export default function Navigation() {
   const isPreviewMode = selectedBranch === "SEFT ALL";
 
   const menuItems = [
-    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", hideInPreview: true },
+    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", hideInPreview: false },
     { to: "/", icon: Database, label: "Data SH2M", hideInPreview: false },
     { to: "/highticket", icon: FileText, label: "Data Highticket", hideInPreview: false },
     { to: "/cicilan", icon: CreditCard, label: "Data Cicilan", hideInPreview: true },
