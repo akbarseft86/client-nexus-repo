@@ -19,14 +19,20 @@ export default function Navigation() {
     { id: "all", label: "SEFT ALL" as const },
   ];
 
+  const isPreviewMode = selectedBranch === "SEFT ALL";
+
   const menuItems = [
-    { to: "/", icon: Database, label: "Data SH2M" },
-    { to: "/highticket", icon: FileText, label: "Data Highticket" },
-    { to: "/cicilan", icon: CreditCard, label: "Data Cicilan" },
-    { to: "/search", icon: Search, label: "Pencarian Client" },
-    { to: "/source-categories", icon: Tags, label: "Kategori Source Iklan" },
-    { to: "/leads-ec", icon: UserCheck, label: "Leads EC" },
+    { to: "/", icon: Database, label: "Data SH2M", hideInPreview: false },
+    { to: "/highticket", icon: FileText, label: "Data Highticket", hideInPreview: false },
+    { to: "/cicilan", icon: CreditCard, label: "Data Cicilan", hideInPreview: true },
+    { to: "/search", icon: Search, label: "Pencarian Client", hideInPreview: false },
+    { to: "/source-categories", icon: Tags, label: "Kategori Source Iklan", hideInPreview: true },
+    { to: "/leads-ec", icon: UserCheck, label: "Leads EC", hideInPreview: false },
   ];
+
+  const visibleMenuItems = isPreviewMode 
+    ? menuItems.filter(item => !item.hideInPreview)
+    : menuItems;
 
   return (
     <nav className="border-b bg-card">
@@ -63,7 +69,7 @@ export default function Navigation() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 bg-popover z-50">
-              {menuItems.map((item) => (
+              {visibleMenuItems.map((item) => (
                 <DropdownMenuItem
                   key={item.to}
                   onClick={() => navigate(item.to)}
