@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { BranchProvider } from "@/contexts/BranchContext";
 import Navigation from "@/components/Navigation";
+import Dashboard from "@/pages/Dashboard";
 import SH2MData from "@/pages/SH2MData";
 import HighticketData from "@/pages/HighticketData";
 import CicilanData from "@/pages/CicilanData";
@@ -27,6 +28,7 @@ const App = () => (
             <main className="container mx-auto py-6">
               <Routes>
                 <Route path="/" element={<SH2MData />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/highticket" element={<HighticketData />} />
                 <Route path="/cicilan" element={<CicilanData />} />
                 <Route path="/search" element={<SearchClient />} />

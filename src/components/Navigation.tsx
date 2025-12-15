@@ -1,4 +1,4 @@
-import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2 } from "lucide-react";
+import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +22,7 @@ export default function Navigation() {
   const isPreviewMode = selectedBranch === "SEFT ALL";
 
   const menuItems = [
+    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", hideInPreview: true },
     { to: "/", icon: Database, label: "Data SH2M", hideInPreview: false },
     { to: "/highticket", icon: FileText, label: "Data Highticket", hideInPreview: false },
     { to: "/cicilan", icon: CreditCard, label: "Data Cicilan", hideInPreview: true },
