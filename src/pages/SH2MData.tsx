@@ -391,7 +391,7 @@ export default function SH2MData() {
           nama_client: nama,
           nohp_client: nohp,
           source_iklan: sourceIklan,
-          asal_iklan: asalIklan,
+          asal_iklan: branchFilter || asalIklan, // Use selected branch if available
           nama_ec: row.nama_ec || row['Nama EC'] || '',
           tanggal_share: row.tanggal_share ? toYMD(new Date(row.tanggal_share)) : null,
           keterangan: row.keterangan || row.Keterangan || '',
@@ -449,7 +449,7 @@ export default function SH2MData() {
       nama_client: nama,
       nohp_client: nohp,
       source_iklan: sourceIklan,
-      asal_iklan: formData.get("asal_iklan") as string,
+      asal_iklan: branchFilter || '', // Use selected branch
       nama_ec: formData.get("nama_ec") as string,
       keterangan: formData.get("keterangan") as string,
       status_payment: formData.get("status_payment") as string || 'unpaid',
@@ -632,7 +632,13 @@ export default function SH2MData() {
                 </div>
                 <div>
                   <Label htmlFor="asal_iklan">Asal Iklan</Label>
-                  <Input id="asal_iklan" name="asal_iklan" />
+                  <Input 
+                    id="asal_iklan" 
+                    name="asal_iklan" 
+                    value={branchFilter || ''} 
+                    disabled 
+                    className="bg-muted"
+                  />
                 </div>
                 <div>
                   <Label htmlFor="nama_ec">Nama EC</Label>
