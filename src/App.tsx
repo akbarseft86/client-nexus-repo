@@ -12,6 +12,7 @@ import CicilanData from "@/pages/CicilanData";
 import SearchClient from "@/pages/SearchClient";
 import SourceIklanCategories from "@/pages/SourceIklanCategories";
 import LeadsEC from "@/pages/LeadsEC";
+import DataDuplikat from "@/pages/DataDuplikat";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
                 <Route path="/search" element={<SearchClient />} />
                 <Route path="/source-categories" element={<SourceIklanCategories />} />
                 <Route path="/leads-ec" element={<LeadsEC />} />
+                <Route path="/data-duplikat" element={<DataDuplikat />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
