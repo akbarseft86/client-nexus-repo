@@ -132,6 +132,7 @@ export default function SH2MData() {
   const [filterDate, setFilterDate] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterEC, setFilterEC] = useState("");
+  const [filterAsalIklan, setFilterAsalIklan] = useState("");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -149,16 +150,21 @@ export default function SH2MData() {
   const queryClient = useQueryClient();
 
   const { data: sh2mData, isLoading } = useQuery({
-    queryKey: ["sh2m-data", filterDate, filterStatus, filterEC, branchFilter],
+    queryKey: ["sh2m-data", filterDate, filterStatus, filterEC, filterAsalIklan, branchFilter],
     queryFn: async () => {
       // Fetch SH2M data
       let query = supabase.from("sh2m_data").select("*")
         .order("tanggal", { ascending: false })
         .order("jam", { ascending: false });
       
-      // Filter by branch
+      // Filter by branch (only when not in preview mode)
       if (branchFilter) {
         query = query.eq("asal_iklan", branchFilter);
+      }
+      
+      // Filter by asal_iklan (only in preview mode - SEFT ALL)
+      if (!branchFilter && filterAsalIklan) {
+        query = query.eq("asal_iklan", filterAsalIklan);
       }
       
       if (filterDate) {
@@ -713,7 +719,7 @@ export default function SH2MData() {
       <Card className="p-4">
         <div className="flex items-center gap-4">
           <Filter className="h-4 w-4 text-muted-foreground" />
-          <div className="flex-1 grid grid-cols-3 gap-4">
+          <div className={`flex-1 grid gap-4 ${isPreviewMode ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <div>
               <Label htmlFor="filter-date">Filter Tanggal</Label>
               <Input
@@ -745,14 +751,30 @@ export default function SH2MData() {
                 onChange={(e) => setFilterEC(e.target.value)}
               />
             </div>
+            {isPreviewMode && (
+              <div>
+                <Label htmlFor="filter-asal">Filter Asal Iklan</Label>
+                <Select value={filterAsalIklan} onValueChange={setFilterAsalIklan}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Semua Asal Iklan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value=" ">Semua Asal Iklan</SelectItem>
+                    <SelectItem value="SEFT Corp - Bekasi">SEFT Corp - Bekasi</SelectItem>
+                    <SelectItem value="SEFT Corp - Jogja">SEFT Corp - Jogja</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
-          {(filterDate || filterStatus || filterEC) && (
+          {(filterDate || filterStatus || filterEC || filterAsalIklan) && (
             <Button
               variant="ghost"
               onClick={() => {
                 setFilterDate("");
                 setFilterStatus("");
                 setFilterEC("");
+                setFilterAsalIklan("");
               }}
             >
               Reset Filter
