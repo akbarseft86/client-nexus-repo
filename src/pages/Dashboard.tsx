@@ -240,24 +240,19 @@ export default function Dashboard() {
     },
   });
 
-  // Get Sales Trend (transactions count per day for selected month)
+  // Get Sales Trend by EC (revenue per EC for selected month)
   const { data: salesTrendData } = useQuery({
     queryKey: ["dashboard-sales-trend", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
       const clientIds = await getClientIds();
-      
-      const days = eachDayOfInterval({
-        start: startOfMonth(selectedDate),
-        end: endOfMonth(selectedDate),
-      });
 
       if (branchFilter && clientIds && clientIds.length === 0) {
-        return days.map(day => ({ name: format(day, 'd'), sales: 0 }));
+        return [];
       }
 
       let query = supabase
         .from("highticket_data")
-        .select("tanggal_transaksi")
+        .select("nama_ec, harga")
         .gte("tanggal_transaksi", monthStartDate)
         .lte("tanggal_transaksi", monthEndDate);
       
@@ -268,15 +263,19 @@ export default function Dashboard() {
       const { data, error } = await query;
       if (error) throw error;
 
-      return days.map(day => {
-        const dayStr = format(day, 'yyyy-MM-dd');
-        const salesCount = data?.filter(tx => tx.tanggal_transaksi === dayStr).length || 0;
-
-        return {
-          name: format(day, 'd'),
-          sales: salesCount,
-        };
+      // Group by EC name
+      const ecRevenue: Record<string, number> = {};
+      data?.forEach(tx => {
+        const ec = tx.nama_ec || 'Tidak Ada EC';
+        if (!ecRevenue[ec]) {
+          ecRevenue[ec] = 0;
+        }
+        ecRevenue[ec] += tx.harga || 0;
       });
+
+      return Object.entries(ecRevenue)
+        .map(([name, revenue]) => ({ name, revenue }))
+        .sort((a, b) => b.revenue - a.revenue);
     },
   });
 
@@ -499,33 +498,36 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Sales Trend Chart */}
+      {/* Sales Trend by EC Chart */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Sales Trend - {months[selectedMonth].label} {selectedYear}
+            Revenue per EC - {months[selectedMonth].label} {selectedYear}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={salesTrendData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="name" className="text-xs" interval="preserveStartEnd" />
-                <YAxis className="text-xs" />
-                <Tooltip content={<CustomTooltip />} />
-                <Line 
-                  type="monotone" 
-                  dataKey="sales" 
-                  stroke="hsl(var(--chart-4))" 
-                  strokeWidth={2}
-                  dot={{ fill: "hsl(var(--chart-4))", strokeWidth: 2, r: 3 }}
-                  activeDot={{ r: 5 }}
-                  name="sales"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {salesTrendData?.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                Belum ada data transaksi
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={salesTrendData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis type="number" tickFormatter={formatCurrency} className="text-xs" />
+                  <YAxis type="category" dataKey="name" className="text-xs" width={80} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar 
+                    dataKey="revenue" 
+                    fill="hsl(var(--chart-4))" 
+                    radius={[0, 4, 4, 0]}
+                    name="revenue"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </CardContent>
       </Card>
