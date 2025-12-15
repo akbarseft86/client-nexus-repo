@@ -17,24 +17,33 @@ import { CalendarIcon, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { useBranch } from "@/contexts/BranchContext";
 
 const LeadsEC = () => {
   const queryClient = useQueryClient();
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [editingDate, setEditingDate] = useState<Date | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  const { getBranchFilter } = useBranch();
+  const branchFilter = getBranchFilter();
 
   const { data: leadsData, isLoading } = useQuery({
-    queryKey: ["leads-ec"],
+    queryKey: ["leads-ec", branchFilter],
     queryFn: async () => {
       // Fetch paid SH2M data
-      const { data: sh2mRows, error: sh2mError } = await supabase
+      let query = supabase
         .from("sh2m_data")
         .select("*")
         .eq("status_payment", "paid")
         .order("tanggal", { ascending: false })
         .order("jam", { ascending: false });
       
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
+      }
+      
+      const { data: sh2mRows, error: sh2mError } = await query;
       if (sh2mError) throw sh2mError;
       
       // Fetch categories

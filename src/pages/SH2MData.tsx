@@ -40,6 +40,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
+import { useBranch } from "@/contexts/BranchContext";
 
 // Parse date from various formats:
 // ISO: "2025-11-12 01:30:05" or "2025-11-12 01:30"
@@ -138,15 +139,23 @@ export default function SH2MData() {
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
   const [normalizeConfirm, setNormalizeConfirm] = useState(false);
   
+  const { getBranchFilter } = useBranch();
+  const branchFilter = getBranchFilter();
+  
   const queryClient = useQueryClient();
 
   const { data: sh2mData, isLoading } = useQuery({
-    queryKey: ["sh2m-data", filterDate, filterStatus, filterEC],
+    queryKey: ["sh2m-data", filterDate, filterStatus, filterEC, branchFilter],
     queryFn: async () => {
       // Fetch SH2M data
       let query = supabase.from("sh2m_data").select("*")
         .order("tanggal", { ascending: false })
         .order("jam", { ascending: false });
+      
+      // Filter by branch
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
+      }
       
       if (filterDate) {
         query = query.eq("tanggal", filterDate);
@@ -157,6 +166,7 @@ export default function SH2MData() {
       if (filterEC) {
         query = query.ilike("nama_ec", `%${filterEC}%`);
       }
+
       
       const { data: sh2mRows, error: sh2mError } = await query;
       if (sh2mError) throw sh2mError;

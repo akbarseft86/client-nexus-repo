@@ -7,16 +7,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useBranch } from "@/contexts/BranchContext";
 
 export default function Navigation() {
   const navigate = useNavigate();
-  const [selectedBranch, setSelectedBranch] = useState("SEFT Jogja");
+  const { selectedBranch, setSelectedBranch } = useBranch();
 
   const branches = [
-    { id: "bekasi", label: "SEFT Bekasi" },
-    { id: "jogja", label: "SEFT Jogja" },
-    { id: "all", label: "SEFT ALL" },
+    { id: "bekasi", label: "SEFT Bekasi" as const },
+    { id: "jogja", label: "SEFT Jogja" as const },
+    { id: "all", label: "SEFT ALL" as const },
   ];
 
   const menuItems = [

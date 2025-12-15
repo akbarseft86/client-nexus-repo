@@ -37,6 +37,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useBranch } from "@/contexts/BranchContext";
 
 interface PaymentHistory {
   id: string;
@@ -70,6 +71,9 @@ export default function CicilanData() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   
+  const { getBranchFilter } = useBranch();
+  const branchFilter = getBranchFilter();
+  
   // Dialog states
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false);
   const [selectedHighticket, setSelectedHighticket] = useState<string | null>(null);
@@ -81,14 +85,34 @@ export default function CicilanData() {
 
   // Fetch highticket data with DP/Angsuran status
   const { data: cicilanData, isLoading } = useQuery({
-    queryKey: ["cicilan-data"],
+    queryKey: ["cicilan-data", branchFilter],
     queryFn: async () => {
-      const { data: highticketData, error: htError } = await supabase
+      // First get client_ids from sh2m_data filtered by branch
+      let clientQuery = supabase.from("sh2m_data").select("client_id");
+      if (branchFilter) {
+        clientQuery = clientQuery.eq("asal_iklan", branchFilter);
+      }
+      const { data: sh2mClients, error: sh2mError } = await clientQuery;
+      if (sh2mError) throw sh2mError;
+      
+      const clientIds = sh2mClients?.map(c => c.client_id) || [];
+      
+      // If branch filter is active and no clients found, return empty
+      if (branchFilter && clientIds.length === 0) {
+        return [];
+      }
+
+      let query = supabase
         .from("highticket_data")
         .select("*")
         .in("status_payment", ["DP", "Angsuran"])
         .order("tanggal_transaksi", { ascending: false });
-
+      
+      if (branchFilter && clientIds.length > 0) {
+        query = query.in("client_id", clientIds);
+      }
+      
+      const { data: highticketData, error: htError } = await query;
       if (htError) throw htError;
 
       // Fetch all payment histories
