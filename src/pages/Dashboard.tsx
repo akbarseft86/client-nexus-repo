@@ -416,18 +416,21 @@ export default function Dashboard() {
         <CardContent>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyRevenueData}>
+              <AreaChart data={monthlyRevenueData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="name" className="text-xs" />
                 <YAxis tickFormatter={formatCurrency} className="text-xs" />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar 
+                <Area 
+                  type="monotone" 
                   dataKey="revenue" 
+                  stroke="hsl(var(--primary))" 
                   fill="hsl(var(--primary))" 
-                  radius={[4, 4, 0, 0]}
+                  fillOpacity={0.3}
+                  strokeWidth={2}
                   name="revenue"
                 />
-              </BarChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </CardContent>
@@ -445,18 +448,21 @@ export default function Dashboard() {
           <CardContent>
             <div className="h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weeklyRevenueData}>
+                <LineChart data={weeklyRevenueData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="name" className="text-xs" />
                   <YAxis tickFormatter={formatCurrency} className="text-xs" />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar 
+                  <Line 
+                    type="monotone" 
                     dataKey="revenue" 
-                    fill="hsl(var(--chart-2))" 
-                    radius={[4, 4, 0, 0]}
+                    stroke="hsl(var(--chart-2))" 
+                    strokeWidth={2}
+                    dot={{ fill: "hsl(var(--chart-2))", strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6 }}
                     name="revenue"
                   />
-                </BarChart>
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
@@ -472,20 +478,21 @@ export default function Dashboard() {
           <CardContent>
             <div className="h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dailyRevenueData}>
+                <LineChart data={dailyRevenueData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="name" className="text-xs" interval="preserveStartEnd" />
                   <YAxis tickFormatter={formatCurrency} className="text-xs" />
                   <Tooltip content={<CustomTooltip />} />
-                  <Area 
+                  <Line 
                     type="monotone" 
                     dataKey="revenue" 
                     stroke="hsl(var(--chart-3))" 
-                    fill="hsl(var(--chart-3))" 
-                    fillOpacity={0.3}
+                    strokeWidth={2}
+                    dot={{ fill: "hsl(var(--chart-3))", strokeWidth: 2, r: 3 }}
+                    activeDot={{ r: 5 }}
                     name="revenue"
                   />
-                </AreaChart>
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
