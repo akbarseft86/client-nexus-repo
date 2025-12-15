@@ -136,6 +136,7 @@ export default function SH2MData() {
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
@@ -346,19 +347,28 @@ export default function SH2MData() {
     }
 
     setIsUploading(true);
+    setUploadProgress(0);
     try {
       const file = selectedFile;
+      setUploadProgress(5); // File reading started
       const data = await file.arrayBuffer();
+      setUploadProgress(10); // File read complete
       // Handle CSV with custom delimiter (semicolon)
       const workbook = XLSX.read(data, { type: 'array', FS: ';' });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
+      setUploadProgress(15); // Parsing complete
 
       const processedData: any[] = [];
       const skippedDuplicates: string[] = [];
       const parsingErrors: string[] = [];
+      const totalRows = (jsonData as any[]).length;
 
-      for (const row of jsonData as any[]) {
+      for (let i = 0; i < totalRows; i++) {
+        const row = (jsonData as any[])[i];
+        // Update progress (15-85% for processing rows)
+        const rowProgress = 15 + Math.floor((i / totalRows) * 70);
+        setUploadProgress(rowProgress);
         // Map CSV columns to database fields
         const draftTime = row.draft_time || row.tanggal || row.Tanggal;
         const { date: tanggal, time: jam } = parseDateTimeFromCSV(draftTime);
@@ -445,10 +455,12 @@ export default function SH2MData() {
         return;
       }
 
+      setUploadProgress(90); // Starting database insert
       const { error } = await supabase.from("sh2m_data").insert(processedData);
       
       if (error) throw error;
       
+      setUploadProgress(100); // Complete
       const message = skippedDuplicates.length > 0
         ? `${processedData.length} data berhasil diupload, ${skippedDuplicates.length} duplikat dilewati`
         : `${processedData.length} data berhasil diupload`;
@@ -462,6 +474,7 @@ export default function SH2MData() {
       toast.error("Gagal mengupload file");
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -548,12 +561,26 @@ export default function SH2MData() {
                     Kolom yang diperlukan: tanggal, nama_client, nohp_client, source_iklan, asal_iklan, nama_ec, keterangan
                   </p>
                 </div>
+                {isUploading && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Progress Upload</span>
+                      <span className="font-medium">{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-secondary rounded-full h-2.5">
+                      <div 
+                        className="bg-primary h-2.5 rounded-full transition-all duration-300" 
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
                 <Button 
                   onClick={handleFileUpload} 
                   disabled={!selectedFile || isUploading}
                   className="w-full"
                 >
-                  {isUploading ? "Mengupload..." : "Submit"}
+                  {isUploading ? `Mengupload... ${uploadProgress}%` : "Submit"}
                 </Button>
               </div>
             </DialogContent>
