@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, Plus, Filter, Trash2 } from "lucide-react";
+import { Upload, Plus, Filter, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -142,8 +142,9 @@ export default function SH2MData() {
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
   const [normalizeConfirm, setNormalizeConfirm] = useState(false);
   
-  const { getBranchFilter } = useBranch();
+  const { getBranchFilter, selectedBranch } = useBranch();
   const branchFilter = getBranchFilter();
+  const isPreviewMode = selectedBranch === "SEFT ALL";
   
   const queryClient = useQueryClient();
 
@@ -509,157 +510,203 @@ export default function SH2MData() {
     setManualDialogOpen(false);
   };
 
+  const handleDownloadData = () => {
+    if (!sh2mData || sh2mData.length === 0) {
+      toast.error("Tidak ada data untuk didownload");
+      return;
+    }
+
+    const exportData = sh2mData.map(row => ({
+      'Client ID': row.client_id,
+      'Tanggal': row.tanggal,
+      'Jam': row.jam || '',
+      'Nama Client': row.nama_client,
+      'No HP': row.nohp_client,
+      'Source Iklan': row.source_iklan,
+      'Kategori': row.kategori,
+      'Asal Iklan': row.asal_iklan,
+      'Nama EC': row.nama_ec || '',
+      'Status Payment': row.status_payment,
+      'Tanggal Share': row.tanggal_share || '',
+      'Keterangan': row.keterangan || '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SH2M Data");
+    XLSX.writeFile(wb, `SH2M_Data_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success("Data berhasil didownload");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Data Client Closing Iklan (SH2M)</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Data Client Closing Iklan (SH2M)</h1>
+          {isPreviewMode && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Mode Preview - Menampilkan gabungan data dari semua cabang
+            </p>
+          )}
+        </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setNormalizeConfirm(true)}
-            disabled={normalizeAllPhonesMutation.isPending}
-          >
-            Normalisasi No HP
+          {/* Download button - always visible */}
+          <Button variant="outline" onClick={handleDownloadData}>
+            <Download className="mr-2 h-4 w-4" />
+            Download Data
           </Button>
-          <Button
-            variant="destructive"
-            onClick={() => setDeleteAllConfirm(true)}
-            disabled={deleteAllMutation.isPending}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Hapus Semua Data
-          </Button>
-          <Dialog open={uploadDialogOpen} onOpenChange={(open) => {
-            setUploadDialogOpen(open);
-            if (!open) setSelectedFile(null);
-          }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Upload className="mr-2 h-4 w-4" />
-                Upload File
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Upload Data dari File</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="file">Pilih File (Excel/CSV)</Label>
-                  <Input
-                    id="file"
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleFileSelect}
-                  />
-                  {selectedFile && (
-                    <p className="text-sm text-primary mt-2">
-                      File dipilih: {selectedFile.name}
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Kolom yang diperlukan: tanggal, nama_client, nohp_client, source_iklan, asal_iklan, nama_ec, keterangan
-                  </p>
-                </div>
-                {isUploading && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Progress Upload</span>
-                      <span className="font-medium">{uploadProgress}%</span>
-                    </div>
-                    <div className="w-full bg-secondary rounded-full h-2.5">
-                      <div 
-                        className="bg-primary h-2.5 rounded-full transition-all duration-300" 
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-                <Button 
-                  onClick={handleFileUpload} 
-                  disabled={!selectedFile || isUploading}
-                  className="w-full"
-                >
-                  {isUploading ? `Mengupload... ${uploadProgress}%` : "Submit"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
           
-          <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Plus className="mr-2 h-4 w-4" />
-                Tambah Manual
+          {/* These buttons are hidden in preview mode (SEFT ALL) */}
+          {!isPreviewMode && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setNormalizeConfirm(true)}
+                disabled={normalizeAllPhonesMutation.isPending}
+              >
+                Normalisasi No HP
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Tambah Data Manual</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                handleManualAdd(new FormData(e.currentTarget));
-              }} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="tanggal">Tanggal</Label>
-                    <Input id="tanggal" name="tanggal" type="date" required />
+              <Button
+                variant="destructive"
+                onClick={() => setDeleteAllConfirm(true)}
+                disabled={deleteAllMutation.isPending}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Hapus Semua Data
+              </Button>
+              <Dialog open={uploadDialogOpen} onOpenChange={(open) => {
+                setUploadDialogOpen(open);
+                if (!open) setSelectedFile(null);
+              }}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload File
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Upload Data dari File</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="file">Pilih File (Excel/CSV)</Label>
+                      <Input
+                        id="file"
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={handleFileSelect}
+                      />
+                      {selectedFile && (
+                        <p className="text-sm text-primary mt-2">
+                          File dipilih: {selectedFile.name}
+                        </p>
+                      )}
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Kolom yang diperlukan: tanggal, nama_client, nohp_client, source_iklan, asal_iklan, nama_ec, keterangan
+                      </p>
+                    </div>
+                    {isUploading && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Progress Upload</span>
+                          <span className="font-medium">{uploadProgress}%</span>
+                        </div>
+                        <div className="w-full bg-secondary rounded-full h-2.5">
+                          <div 
+                            className="bg-primary h-2.5 rounded-full transition-all duration-300" 
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <Button 
+                      onClick={handleFileUpload} 
+                      disabled={!selectedFile || isUploading}
+                      className="w-full"
+                    >
+                      {isUploading ? `Mengupload... ${uploadProgress}%` : "Submit"}
+                    </Button>
                   </div>
-                  <div>
-                    <Label htmlFor="jam">Jam</Label>
-                    <Input id="jam" name="jam" placeholder="HH.mm" />
-                  </div>
-                  <div>
-                    <Label htmlFor="nama_client">Nama Client</Label>
-                    <Input id="nama_client" name="nama_client" required />
-                  </div>
-                  <div>
-                    <Label htmlFor="nohp_client">No HP Client</Label>
-                    <Input id="nohp_client" name="nohp_client" required />
-                  </div>
-                  <div>
-                    <Label htmlFor="source_iklan">Source Iklan</Label>
-                    <Input id="source_iklan" name="source_iklan" required />
-                  </div>
-                  <div>
-                    <Label htmlFor="asal_iklan">Asal Iklan</Label>
-                    <Input id="asal_iklan" name="asal_iklan" />
-                  </div>
-                  <div>
-                    <Label htmlFor="nama_ec">Nama EC</Label>
-                    <Select name="nama_ec">
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih EC" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EC_OPTIONS.map((ec) => (
-                          <SelectItem key={ec} value={ec}>{ec}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="status_payment">Status Payment</Label>
-                    <Select name="status_payment" defaultValue="unpaid">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="paid">Paid</SelectItem>
-                        <SelectItem value="unpaid">Unpaid</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2">
-                    <Label htmlFor="keterangan">Keterangan</Label>
-                    <Input id="keterangan" name="keterangan" />
-                  </div>
-                </div>
-                <Button type="submit" className="w-full">Tambah Data</Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+                </DialogContent>
+              </Dialog>
+              
+              <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Tambah Manual
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Tambah Data Manual</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    handleManualAdd(new FormData(e.currentTarget));
+                  }} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="tanggal">Tanggal</Label>
+                        <Input id="tanggal" name="tanggal" type="date" required />
+                      </div>
+                      <div>
+                        <Label htmlFor="jam">Jam</Label>
+                        <Input id="jam" name="jam" placeholder="HH.mm" />
+                      </div>
+                      <div>
+                        <Label htmlFor="nama_client">Nama Client</Label>
+                        <Input id="nama_client" name="nama_client" required />
+                      </div>
+                      <div>
+                        <Label htmlFor="nohp_client">No HP Client</Label>
+                        <Input id="nohp_client" name="nohp_client" required />
+                      </div>
+                      <div>
+                        <Label htmlFor="source_iklan">Source Iklan</Label>
+                        <Input id="source_iklan" name="source_iklan" required />
+                      </div>
+                      <div>
+                        <Label htmlFor="asal_iklan">Asal Iklan</Label>
+                        <Input id="asal_iklan" name="asal_iklan" />
+                      </div>
+                      <div>
+                        <Label htmlFor="nama_ec">Nama EC</Label>
+                        <Select name="nama_ec">
+                          <SelectTrigger>
+                            <SelectValue placeholder="Pilih EC" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {EC_OPTIONS.map((ec) => (
+                              <SelectItem key={ec} value={ec}>{ec}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="status_payment">Status Payment</Label>
+                        <Select name="status_payment" defaultValue="unpaid">
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="paid">Paid</SelectItem>
+                            <SelectItem value="unpaid">Unpaid</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2">
+                        <Label htmlFor="keterangan">Keterangan</Label>
+                        <Input id="keterangan" name="keterangan" />
+                      </div>
+                    </div>
+                    <Button type="submit" className="w-full">Tambah Data</Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
         </div>
       </div>
 
@@ -831,22 +878,24 @@ export default function SH2MData() {
                   </TableCell>
                   <TableCell>{row.keterangan}</TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditingRow(editingRow === row.id ? null : row.id)}
-                      >
-                        {editingRow === row.id ? 'Selesai' : 'Edit'}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleteConfirmId(row.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
+                    {!isPreviewMode && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingRow(editingRow === row.id ? null : row.id)}
+                        >
+                          {editingRow === row.id ? 'Selesai' : 'Edit'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteConfirmId(row.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
