@@ -121,7 +121,7 @@ export default function Dashboard() {
   
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-  // Get Total Revenue (All Time for this branch) - only Lunas + Pelunasan (actual paid revenue)
+  // Get Total Revenue (All Time for this branch) - ALL transactions regardless of status
   const { data: totalRevenue } = useQuery({
     queryKey: ["dashboard-total-revenue", branchFilter],
     queryFn: async () => {
@@ -133,8 +133,7 @@ export default function Dashboard() {
       while (hasMore) {
         let query = supabase
           .from("highticket_data")
-          .select("harga, status_payment")
-          .in("status_payment", ["Lunas", "Pelunasan"])
+          .select("harga")
           .range(from, from + PAGE_SIZE - 1);
         
         if (branchFilter) {
@@ -311,7 +310,7 @@ export default function Dashboard() {
     },
   });
 
-  // Get monthly revenue for selected month - only Lunas + Pelunasan
+  // Get monthly revenue for selected month - ALL transactions
   const { data: currentMonthRevenue } = useQuery({
     queryKey: ["dashboard-current-month-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
@@ -324,7 +323,6 @@ export default function Dashboard() {
         let query = supabase
           .from("highticket_data")
           .select("harga")
-          .in("status_payment", ["Lunas", "Pelunasan"])
           .gte("tanggal_transaksi", monthStartDate)
           .lte("tanggal_transaksi", monthEndDate)
           .range(from, from + PAGE_SIZE - 1);
@@ -428,7 +426,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">Rp {(totalRevenue || 0).toLocaleString('id-ID')}</div>
-            <p className="text-xs text-muted-foreground mt-1">Lunas + Pelunasan</p>
+            <p className="text-xs text-muted-foreground mt-1">Semua transaksi {selectedBranch}</p>
           </CardContent>
         </Card>
         <Card>

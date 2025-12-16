@@ -190,30 +190,25 @@ export default function CEODashboard() {
     const categorizedSources = new Set(categories?.filter(c => c.kategori)?.map(c => c.source_iklan) || []);
 
     // ===== REVENUE METRICS FROM HIGHTICKET =====
-    // Total Revenue (Lunas + Pelunasan)
-    const revenueTransactions = filteredHighticket.filter(
-      d => d.status_payment === "Lunas" || d.status_payment === "Pelunasan"
-    );
-    const totalRevenue = revenueTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    // Total Revenue (ALL transactions)
+    const totalRevenue = filteredHighticket.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
-    // MTD Revenue
+    // MTD Revenue (ALL transactions)
     const mtdStart = startOfMonth(today);
     const mtdEnd = endOfMonth(today);
     const mtdTransactions = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
-      return date >= mtdStart && date <= mtdEnd && 
-        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+      return date >= mtdStart && date <= mtdEnd;
     });
     const mtdRevenue = mtdTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
     // ===== MoM GROWTH CALCULATION =====
-    // Previous month revenue
+    // Previous month revenue (ALL transactions)
     const prevMonthStart = startOfMonth(subMonths(today, 1));
     const prevMonthEnd = endOfMonth(subMonths(today, 1));
     const prevMonthTransactions = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
-      return date >= prevMonthStart && date <= prevMonthEnd && 
-        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+      return date >= prevMonthStart && date <= prevMonthEnd;
     });
     const prevMonthRevenue = prevMonthTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
@@ -239,23 +234,21 @@ export default function CEODashboard() {
       : mtdTransactionCount > 0 ? 100 : 0;
 
     // ===== YoY GROWTH CALCULATION =====
-    // Selected month this year
+    // Selected month this year (ALL transactions)
     const selectedMonthStart = new Date(selectedYear, selectedMonth, 1);
     const selectedMonthEnd = new Date(selectedYear, selectedMonth + 1, 0);
     const selectedMonthTransactions = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
-      return date >= selectedMonthStart && date <= selectedMonthEnd && 
-        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+      return date >= selectedMonthStart && date <= selectedMonthEnd;
     });
     const selectedMonthRevenue = selectedMonthTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
-    // Same month last year
+    // Same month last year (ALL transactions)
     const lastYearStart = new Date(selectedYear - 1, selectedMonth, 1);
     const lastYearEnd = new Date(selectedYear - 1, selectedMonth + 1, 0);
     const lastYearTransactions = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
-      return date >= lastYearStart && date <= lastYearEnd && 
-        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+      return date >= lastYearStart && date <= lastYearEnd;
     });
     const lastYearRevenue = lastYearTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
@@ -280,18 +273,16 @@ export default function CEODashboard() {
       ? ((selectedTransactionCount - lastYearTransactionCount) / lastYearTransactionCount) * 100 
       : selectedTransactionCount > 0 ? 100 : 0;
 
-    // Full year comparison
+    // Full year comparison (ALL transactions)
     const currentYearData = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
-      return date.getFullYear() === selectedYear && 
-        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+      return date.getFullYear() === selectedYear;
     });
     const currentYearRevenue = currentYearData.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
     const previousYearData = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
-      return date.getFullYear() === selectedYear - 1 && 
-        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+      return date.getFullYear() === selectedYear - 1;
     });
     const previousYearRevenue = previousYearData.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
@@ -831,7 +822,7 @@ export default function CEODashboard() {
               <span className="text-sm text-muted-foreground">Total Revenue</span>
             </div>
             <p className="text-xl font-bold mt-2 text-green-600">{formatCurrency(metrics?.totalRevenue || 0)}</p>
-            <p className="text-xs text-muted-foreground">Lunas + Pelunasan</p>
+            <p className="text-xs text-muted-foreground">Semua transaksi</p>
           </CardContent>
         </Card>
 
