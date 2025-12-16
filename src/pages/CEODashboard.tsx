@@ -222,9 +222,19 @@ export default function CEODashboard() {
       : mtdTransactionCount > 0 ? 100 : 0;
 
     // ===== YoY GROWTH CALCULATION =====
+    // Selected month this year
+    const selectedMonthStart = new Date(selectedYear, selectedMonth, 1);
+    const selectedMonthEnd = new Date(selectedYear, selectedMonth + 1, 0);
+    const selectedMonthTransactions = highticketData.filter(d => {
+      const date = new Date(d.tanggal_transaksi);
+      return date >= selectedMonthStart && date <= selectedMonthEnd && 
+        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+    });
+    const selectedMonthRevenue = selectedMonthTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
+
     // Same month last year
-    const lastYearStart = new Date(today.getFullYear() - 1, today.getMonth(), 1);
-    const lastYearEnd = new Date(today.getFullYear() - 1, today.getMonth() + 1, 0);
+    const lastYearStart = new Date(selectedYear - 1, selectedMonth, 1);
+    const lastYearEnd = new Date(selectedYear - 1, selectedMonth + 1, 0);
     const lastYearTransactions = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
       return date >= lastYearStart && date <= lastYearEnd && 
@@ -234,32 +244,35 @@ export default function CEODashboard() {
 
     // Calculate YoY Growth Rate
     const yoyGrowthRate = lastYearRevenue > 0 
-      ? ((mtdRevenue - lastYearRevenue) / lastYearRevenue) * 100 
-      : mtdRevenue > 0 ? 100 : 0;
+      ? ((selectedMonthRevenue - lastYearRevenue) / lastYearRevenue) * 100 
+      : selectedMonthRevenue > 0 ? 100 : 0;
 
-    // YoY Growth per Branch
+    // YoY Growth per Branch - Selected month
+    const selectedBekasi = selectedMonthTransactions.filter(d => d.asal_iklan?.includes("Bekasi")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const selectedJogja = selectedMonthTransactions.filter(d => d.asal_iklan?.includes("Jogja")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
     const lastYearBekasi = lastYearTransactions.filter(d => d.asal_iklan?.includes("Bekasi")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
     const lastYearJogja = lastYearTransactions.filter(d => d.asal_iklan?.includes("Jogja")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
     
-    const yoyGrowthBekasi = lastYearBekasi > 0 ? ((mtdBekasi - lastYearBekasi) / lastYearBekasi) * 100 : mtdBekasi > 0 ? 100 : 0;
-    const yoyGrowthJogja = lastYearJogja > 0 ? ((mtdJogja - lastYearJogja) / lastYearJogja) * 100 : mtdJogja > 0 ? 100 : 0;
+    const yoyGrowthBekasi = lastYearBekasi > 0 ? ((selectedBekasi - lastYearBekasi) / lastYearBekasi) * 100 : selectedBekasi > 0 ? 100 : 0;
+    const yoyGrowthJogja = lastYearJogja > 0 ? ((selectedJogja - lastYearJogja) / lastYearJogja) * 100 : selectedJogja > 0 ? 100 : 0;
 
     // YoY Transaction count
+    const selectedTransactionCount = selectedMonthTransactions.length;
     const lastYearTransactionCount = lastYearTransactions.length;
     const yoyGrowthTransactions = lastYearTransactionCount > 0 
-      ? ((mtdTransactionCount - lastYearTransactionCount) / lastYearTransactionCount) * 100 
-      : mtdTransactionCount > 0 ? 100 : 0;
+      ? ((selectedTransactionCount - lastYearTransactionCount) / lastYearTransactionCount) * 100 
+      : selectedTransactionCount > 0 ? 100 : 0;
 
     // Full year comparison
     const currentYearRevenue = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
-      return date.getFullYear() === today.getFullYear() && 
+      return date.getFullYear() === selectedYear && 
         (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
     }).reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
     const previousYearRevenue = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
-      return date.getFullYear() === today.getFullYear() - 1 && 
+      return date.getFullYear() === selectedYear - 1 && 
         (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
     }).reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
@@ -580,6 +593,7 @@ export default function CEODashboard() {
       yoyGrowthJogja,
       yoyGrowthTransactions,
       lastYearRevenue,
+      selectedMonthRevenue,
       currentYearRevenue,
       previousYearRevenue,
       yoyFullYearGrowth,
@@ -871,7 +885,7 @@ export default function CEODashboard() {
             YoY Growth Summary
           </CardTitle>
           <CardDescription>
-            Perbandingan bulan ini ({monthNames[today.getMonth()]}) vs tahun lalu ({today.getFullYear() - 1})
+            Perbandingan bulan {monthNames[selectedMonth]} {selectedYear} vs {monthNames[selectedMonth]} {selectedYear - 1}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -881,7 +895,7 @@ export default function CEODashboard() {
               <p className="text-sm text-muted-foreground mb-2">Revenue YoY</p>
               {metrics && getGrowthIndicator(metrics.yoyGrowthRate, "lg")}
               <p className="text-xs text-muted-foreground mt-2">
-                {formatCurrency(metrics?.lastYearRevenue || 0)} → {formatCurrency(metrics?.mtdRevenue || 0)}
+                {formatCurrency(metrics?.lastYearRevenue || 0)} → {formatCurrency(metrics?.selectedMonthRevenue || 0)}
               </p>
             </div>
             
