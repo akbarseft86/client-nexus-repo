@@ -10,7 +10,7 @@ import {
   Repeat, Building2, Target, Clock, CheckCircle, XCircle, AlertCircle,
   DollarSign, Percent, UserCheck, CreditCard, Wallet, Receipt
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subDays, differenceInDays } from "date-fns";
+import { format, startOfMonth, endOfMonth, differenceInDays } from "date-fns";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 // Normalize phone number
@@ -42,8 +42,6 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-type DateFilter = "today" | "week" | "month" | "all";
-
 const PAYMENT_STATUS_COLORS: Record<string, string> = {
   "Lunas": "#22c55e",
   "DP": "#f59e0b",
@@ -52,17 +50,25 @@ const PAYMENT_STATUS_COLORS: Record<string, string> = {
   "Bonus": "#ec4899",
 };
 
-export default function CEODashboard() {
-  const [dateFilter, setDateFilter] = useState<DateFilter>("month");
+// Generate year options (from 2023 to current year + 1)
+const currentYear = new Date().getFullYear();
+const yearOptions = Array.from({ length: currentYear - 2022 }, (_, i) => 2023 + i);
 
+// Month names in Indonesian
+const monthNames = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+];
+
+export default function CEODashboard() {
   const today = new Date();
+  const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
+
   const getDateRange = () => {
-    switch (dateFilter) {
-      case "today": return { start: today, end: today };
-      case "week": return { start: subDays(today, 7), end: today };
-      case "month": return { start: startOfMonth(today), end: endOfMonth(today) };
-      default: return { start: null, end: null };
-    }
+    const start = new Date(selectedYear, selectedMonth, 1);
+    const end = new Date(selectedYear, selectedMonth + 1, 0); // Last day of month
+    return { start, end };
   };
 
   // Fetch all SH2M data
@@ -121,24 +127,22 @@ export default function CEODashboard() {
   const filteredSh2m = useMemo(() => {
     if (!sh2mData) return [];
     const range = getDateRange();
-    if (!range.start) return sh2mData;
     
     return sh2mData.filter(d => {
       const recordDate = new Date(d.tanggal);
-      return recordDate >= range.start! && recordDate <= range.end!;
+      return recordDate >= range.start && recordDate <= range.end;
     });
-  }, [sh2mData, dateFilter]);
+  }, [sh2mData, selectedMonth, selectedYear]);
 
   const filteredHighticket = useMemo(() => {
     if (!highticketData) return [];
     const range = getDateRange();
-    if (!range.start) return highticketData;
     
     return highticketData.filter(d => {
       const recordDate = new Date(d.tanggal_transaksi);
-      return recordDate >= range.start! && recordDate <= range.end!;
+      return recordDate >= range.start && recordDate <= range.end;
     });
-  }, [highticketData, dateFilter]);
+  }, [highticketData, selectedMonth, selectedYear]);
 
   // Calculate all metrics
   const metrics = useMemo(() => {
@@ -444,7 +448,7 @@ export default function CEODashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
           <BarChart3 className="h-8 w-8 text-primary" />
           <div>
@@ -452,17 +456,28 @@ export default function CEODashboard() {
             <p className="text-muted-foreground">Executive Dashboard - Semua Cabang</p>
           </div>
         </div>
-        <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">Hari Ini</SelectItem>
-            <SelectItem value="week">7 Hari Terakhir</SelectItem>
-            <SelectItem value="month">Bulan Ini</SelectItem>
-            <SelectItem value="all">Semua Data</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
+            <SelectTrigger className="w-36">
+              <SelectValue placeholder="Pilih Bulan" />
+            </SelectTrigger>
+            <SelectContent>
+              {monthNames.map((month, index) => (
+                <SelectItem key={index} value={index.toString()}>{month}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+            <SelectTrigger className="w-24">
+              <SelectValue placeholder="Tahun" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((year) => (
+                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* A. Executive Summary - Revenue Focus */}
