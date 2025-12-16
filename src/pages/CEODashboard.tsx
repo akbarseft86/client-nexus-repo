@@ -8,10 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   BarChart3, TrendingUp, Users, AlertTriangle, Shield, Crown, 
   Repeat, Building2, Target, Clock, CheckCircle, XCircle, AlertCircle,
-  DollarSign, Percent, UserCheck
+  DollarSign, Percent, UserCheck, CreditCard, Wallet, Receipt
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subDays, isAfter, differenceInDays } from "date-fns";
-import { id } from "date-fns/locale";
+import { format, startOfMonth, endOfMonth, subDays, differenceInDays } from "date-fns";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 // Normalize phone number
 function normalizePhoneNumber(phone: string | null | undefined): string {
@@ -33,7 +33,24 @@ function isValidPhoneNumber(phone: string): boolean {
   return /^62\d{8,13}$/.test(normalized);
 }
 
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
 type DateFilter = "today" | "week" | "month" | "all";
+
+const PAYMENT_STATUS_COLORS: Record<string, string> = {
+  "Lunas": "#22c55e",
+  "DP": "#f59e0b",
+  "Angsuran": "#3b82f6",
+  "Pelunasan": "#8b5cf6",
+  "Bonus": "#ec4899",
+};
 
 export default function CEODashboard() {
   const [dateFilter, setDateFilter] = useState<DateFilter>("month");
@@ -49,13 +66,38 @@ export default function CEODashboard() {
   };
 
   // Fetch all SH2M data
-  const { data: sh2mData, isLoading } = useQuery({
+  const { data: sh2mData, isLoading: loadingSh2m } = useQuery({
     queryKey: ["ceo-dashboard-sh2m"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sh2m_data")
         .select("*")
         .order("tanggal", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch all Highticket data
+  const { data: highticketData, isLoading: loadingHighticket } = useQuery({
+    queryKey: ["ceo-dashboard-highticket"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("highticket_data")
+        .select("*")
+        .order("tanggal_transaksi", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch payment history for outstanding calculation
+  const { data: paymentHistory } = useQuery({
+    queryKey: ["ceo-dashboard-payments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_history")
+        .select("*");
       if (error) throw error;
       return data || [];
     },
@@ -73,8 +115,10 @@ export default function CEODashboard() {
     },
   });
 
+  const isLoading = loadingSh2m || loadingHighticket;
+
   // Filter data by date range
-  const filteredData = useMemo(() => {
+  const filteredSh2m = useMemo(() => {
     if (!sh2mData) return [];
     const range = getDateRange();
     if (!range.start) return sh2mData;
@@ -85,23 +129,150 @@ export default function CEODashboard() {
     });
   }, [sh2mData, dateFilter]);
 
+  const filteredHighticket = useMemo(() => {
+    if (!highticketData) return [];
+    const range = getDateRange();
+    if (!range.start) return highticketData;
+    
+    return highticketData.filter(d => {
+      const recordDate = new Date(d.tanggal_transaksi);
+      return recordDate >= range.start! && recordDate <= range.end!;
+    });
+  }, [highticketData, dateFilter]);
+
   // Calculate all metrics
   const metrics = useMemo(() => {
-    if (!sh2mData) return null;
+    if (!sh2mData || !highticketData) return null;
 
     const categoriesMap = new Map(categories?.map(c => [c.source_iklan, c.kategori]) || []);
     const categorizedSources = new Set(categories?.filter(c => c.kategori)?.map(c => c.source_iklan) || []);
 
-    // ===== EXECUTIVE SUMMARY =====
-    const totalTransactions = filteredData.length;
-    const paidTransactions = filteredData.filter(d => d.status_payment === "paid").length;
+    // ===== REVENUE METRICS FROM HIGHTICKET =====
+    // Total Revenue (Lunas + Pelunasan)
+    const revenueTransactions = filteredHighticket.filter(
+      d => d.status_payment === "Lunas" || d.status_payment === "Pelunasan"
+    );
+    const totalRevenue = revenueTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
+
+    // MTD Revenue
+    const mtdStart = startOfMonth(today);
+    const mtdEnd = endOfMonth(today);
+    const mtdTransactions = highticketData.filter(d => {
+      const date = new Date(d.tanggal_transaksi);
+      return date >= mtdStart && date <= mtdEnd && 
+        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+    });
+    const mtdRevenue = mtdTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
+
+    // Outstanding (DP + Angsuran - payments made)
+    const outstandingTransactions = filteredHighticket.filter(
+      d => d.status_payment === "DP" || d.status_payment === "Angsuran"
+    );
+    let totalOutstanding = 0;
+    outstandingTransactions.forEach(ht => {
+      const targetAmount = ht.harga_bayar ? Number(ht.harga_bayar) : Number(ht.harga);
+      const payments = paymentHistory?.filter(p => p.highticket_id === ht.id) || [];
+      const totalPaid = payments.reduce((sum, p) => sum + Number(p.jumlah_bayar), 0);
+      totalOutstanding += Math.max(0, targetAmount - totalPaid);
+    });
+
+    // ARPC (Average Revenue Per Client)
+    const uniqueHighticketClients = new Set(filteredHighticket.map(d => normalizePhoneNumber(d.nohp)));
+    const arpc = uniqueHighticketClients.size > 0 ? totalRevenue / uniqueHighticketClients.size : 0;
+
+    // ===== PAYMENT STATUS DISTRIBUTION =====
+    const paymentStatusCounts: Record<string, number> = {};
+    filteredHighticket.forEach(d => {
+      const status = d.status_payment || "Unknown";
+      paymentStatusCounts[status] = (paymentStatusCounts[status] || 0) + 1;
+    });
+    const paymentStatusData = Object.entries(paymentStatusCounts).map(([name, value]) => ({
+      name,
+      value,
+      color: PAYMENT_STATUS_COLORS[name] || "#94a3b8",
+    }));
+
+    // ===== REVENUE BY BRANCH =====
+    const branchRevenue: Record<string, { total: number; paid: number; revenue: number; outstanding: number }> = {
+      "SEFT Corp - Bekasi": { total: 0, paid: 0, revenue: 0, outstanding: 0 },
+      "SEFT Corp - Jogja": { total: 0, paid: 0, revenue: 0, outstanding: 0 },
+    };
+
+    filteredHighticket.forEach(d => {
+      const branch = d.asal_iklan || "";
+      if (!branchRevenue[branch]) return;
+      
+      branchRevenue[branch].total++;
+      if (d.status_payment === "Lunas" || d.status_payment === "Pelunasan") {
+        branchRevenue[branch].paid++;
+        branchRevenue[branch].revenue += Number(d.harga || 0);
+      }
+      if (d.status_payment === "DP" || d.status_payment === "Angsuran") {
+        const targetAmount = d.harga_bayar ? Number(d.harga_bayar) : Number(d.harga);
+        const payments = paymentHistory?.filter(p => p.highticket_id === d.id) || [];
+        const totalPaid = payments.reduce((sum, p) => sum + Number(p.jumlah_bayar), 0);
+        branchRevenue[branch].outstanding += Math.max(0, targetAmount - totalPaid);
+      }
+    });
+
+    const branchRevenueData = Object.entries(branchRevenue).map(([branch, data]) => ({
+      branch,
+      branchLabel: branch.includes("Bekasi") ? "Bekasi" : "Jogja",
+      ...data,
+    })).sort((a, b) => b.revenue - a.revenue);
+
+    // ===== EC PERFORMANCE =====
+    const ecStats: Record<string, { transactions: number; revenue: number; clients: Set<string> }> = {};
+    filteredHighticket.forEach(d => {
+      const ec = d.nama_ec || "Unknown";
+      if (!ecStats[ec]) ecStats[ec] = { transactions: 0, revenue: 0, clients: new Set() };
+      ecStats[ec].transactions++;
+      if (d.status_payment === "Lunas" || d.status_payment === "Pelunasan") {
+        ecStats[ec].revenue += Number(d.harga || 0);
+      }
+      const phone = normalizePhoneNumber(d.nohp);
+      if (phone) ecStats[ec].clients.add(phone);
+    });
+
+    const ecPerformance = Object.entries(ecStats)
+      .map(([ec, data]) => ({
+        ec,
+        transactions: data.transactions,
+        revenue: data.revenue,
+        clients: data.clients.size,
+        avgValue: data.transactions > 0 ? data.revenue / data.transactions : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+
+    // ===== TOP OUTSTANDING CLIENTS =====
+    const outstandingByClient = outstandingTransactions.map(ht => {
+      const targetAmount = ht.harga_bayar ? Number(ht.harga_bayar) : Number(ht.harga);
+      const payments = paymentHistory?.filter(p => p.highticket_id === ht.id) || [];
+      const totalPaid = payments.reduce((sum, p) => sum + Number(p.jumlah_bayar), 0);
+      const remaining = Math.max(0, targetAmount - totalPaid);
+      const daysSinceTransaction = differenceInDays(today, new Date(ht.tanggal_transaksi));
+      return {
+        id: ht.id,
+        nama: ht.nama,
+        nohp: ht.nohp,
+        program: ht.nama_program,
+        status: ht.status_payment,
+        remaining,
+        days: daysSinceTransaction,
+      };
+    }).filter(c => c.remaining > 0).sort((a, b) => b.remaining - a.remaining).slice(0, 5);
+
+    // ===== SH2M METRICS =====
+    const totalTransactions = filteredSh2m.length;
+    const paidTransactions = filteredSh2m.filter(d => d.status_payment === "paid").length;
     const paidRate = totalTransactions > 0 ? (paidTransactions / totalTransactions) * 100 : 0;
 
     // Unique clients (by normalized phone)
     const uniquePhones = new Set<string>();
     const phoneTransactions = new Map<string, any[]>();
     
-    filteredData.forEach(d => {
+    filteredSh2m.forEach(d => {
       const phone = normalizePhoneNumber(d.nohp_client);
       if (phone && phone.length >= 10) {
         uniquePhones.add(phone);
@@ -142,54 +313,6 @@ export default function CEODashboard() {
       }
     });
 
-    // ===== BRANCH PERFORMANCE =====
-    const branchStats = new Map<string, {
-      total: number;
-      paid: number;
-      uniquePhones: Set<string>;
-      repeatPhones: Set<string>;
-    }>();
-
-    ["SEFT Corp - Bekasi", "SEFT Corp - Jogja"].forEach(branch => {
-      branchStats.set(branch, { total: 0, paid: 0, uniquePhones: new Set(), repeatPhones: new Set() });
-    });
-
-    const branchPhoneCount = new Map<string, Map<string, number>>();
-    
-    filteredData.forEach(d => {
-      const branch = d.asal_iklan || "";
-      if (!branchStats.has(branch)) return;
-      
-      const stats = branchStats.get(branch)!;
-      stats.total++;
-      if (d.status_payment === "paid") stats.paid++;
-      
-      const phone = normalizePhoneNumber(d.nohp_client);
-      if (phone) {
-        stats.uniquePhones.add(phone);
-        
-        if (!branchPhoneCount.has(branch)) branchPhoneCount.set(branch, new Map());
-        const phoneMap = branchPhoneCount.get(branch)!;
-        phoneMap.set(phone, (phoneMap.get(phone) || 0) + 1);
-      }
-    });
-
-    branchPhoneCount.forEach((phoneMap, branch) => {
-      phoneMap.forEach((count, phone) => {
-        if (count >= 2) branchStats.get(branch)?.repeatPhones.add(phone);
-      });
-    });
-
-    const branchPerformance = Array.from(branchStats.entries()).map(([branch, stats]) => ({
-      branch,
-      branchLabel: branch.includes("Bekasi") ? "Bekasi" : "Jogja",
-      total: stats.total,
-      paid: stats.paid,
-      paidRate: stats.total > 0 ? (stats.paid / stats.total) * 100 : 0,
-      uniqueClients: stats.uniquePhones.size,
-      repeatRate: stats.uniquePhones.size > 0 ? (stats.repeatPhones.size / stats.uniquePhones.size) * 100 : 0,
-    })).sort((a, b) => b.paid - a.paid);
-
     // ===== SOURCE IKLAN PERFORMANCE (Top 10) =====
     const sourceStats = new Map<string, {
       total: number;
@@ -197,7 +320,7 @@ export default function CEODashboard() {
       uniquePhones: Set<string>;
     }>();
 
-    filteredData.forEach(d => {
+    filteredSh2m.forEach(d => {
       const source = d.source_iklan || "Unknown";
       if (!sourceStats.has(source)) {
         sourceStats.set(source, { total: 0, paid: 0, uniquePhones: new Set() });
@@ -222,7 +345,23 @@ export default function CEODashboard() {
       .slice(0, 10);
 
     // ===== RISK & ALERTS =====
-    const alerts: { type: "critical" | "warning"; message: string; count: number }[] = [];
+    const alerts: { type: "critical" | "warning"; message: string; count: number | string }[] = [];
+
+    // High outstanding
+    if (totalOutstanding > 50000000) {
+      alerts.push({ type: "critical", message: "Outstanding receivables tinggi", count: formatCurrency(totalOutstanding) });
+    } else if (totalOutstanding > 20000000) {
+      alerts.push({ type: "warning", message: "Outstanding perlu diperhatikan", count: formatCurrency(totalOutstanding) });
+    }
+
+    // DP > 30 days
+    const overdueDP = outstandingTransactions.filter(ht => {
+      const daysSince = differenceInDays(today, new Date(ht.tanggal_transaksi));
+      return daysSince > 30 && ht.status_payment === "DP";
+    }).length;
+    if (overdueDP > 0) {
+      alerts.push({ type: "critical", message: "DP belum lunas > 30 hari", count: overdueDP });
+    }
 
     // Duplicates
     const allPhones = new Map<string, number>();
@@ -251,17 +390,26 @@ export default function CEODashboard() {
     // Empty data
     const emptyPhone = sh2mData.filter(d => !d.nohp_client || d.nohp_client.trim() === "").length;
     const emptySource = sh2mData.filter(d => !d.source_iklan || d.source_iklan.trim() === "").length;
-    const emptyStatus = sh2mData.filter(d => !d.status_payment).length;
 
     if (emptyPhone > 0) alerts.push({ type: "critical", message: "Data dengan no HP kosong", count: emptyPhone });
     if (emptySource > 0) alerts.push({ type: "warning", message: "Data tanpa source iklan", count: emptySource });
-    if (emptyStatus > 0) alerts.push({ type: "warning", message: "Data tanpa status payment", count: emptyStatus });
-
-    // LTV calculation
-    const totalLTV = paidTransactions; // Count of paid as LTV proxy
 
     return {
-      // Executive Summary
+      // Revenue Metrics
+      totalRevenue,
+      mtdRevenue,
+      totalOutstanding,
+      arpc,
+      // Payment Status
+      paymentStatusData,
+      totalHighticket: filteredHighticket.length,
+      // Branch Revenue
+      branchRevenueData,
+      // EC Performance
+      ecPerformance,
+      // Outstanding Clients
+      outstandingByClient,
+      // SH2M Metrics
       totalTransactions,
       paidTransactions,
       paidRate,
@@ -272,15 +420,12 @@ export default function CEODashboard() {
       highValueClients,
       trustScore,
       unpaidOver7Days,
-      totalLTV,
-      // Branch Performance
-      branchPerformance,
       // Source Performance
       sourcePerformance,
       // Alerts
       alerts,
     };
-  }, [filteredData, sh2mData, categories]);
+  }, [filteredSh2m, filteredHighticket, sh2mData, highticketData, paymentHistory, categories]);
 
   const getTrustBadge = (score: number) => {
     if (score >= 90) return <Badge className="bg-green-500 text-white"><CheckCircle className="h-3 w-3 mr-1" />{score.toFixed(0)}%</Badge>;
@@ -320,81 +465,127 @@ export default function CEODashboard() {
         </Select>
       </div>
 
-      {/* A. Executive Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* A. Executive Summary - Revenue Focus */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="border-l-4 border-l-green-500">
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-green-500" />
-              <span className="text-sm text-muted-foreground">Paid Revenue</span>
+              <span className="text-sm text-muted-foreground">Total Revenue</span>
             </div>
-            <p className="text-2xl font-bold mt-2 text-green-600">{metrics?.paidTransactions.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">transactions</p>
+            <p className="text-xl font-bold mt-2 text-green-600">{formatCurrency(metrics?.totalRevenue || 0)}</p>
+            <p className="text-xs text-muted-foreground">Lunas + Pelunasan</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-blue-500">
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
-              <Percent className="h-5 w-5 text-blue-500" />
-              <span className="text-sm text-muted-foreground">Paid Rate</span>
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+              <span className="text-sm text-muted-foreground">MTD Revenue</span>
             </div>
-            <p className="text-2xl font-bold mt-2">{metrics?.paidRate.toFixed(1)}%</p>
-            <p className="text-xs text-muted-foreground">{metrics?.paidTransactions}/{metrics?.totalTransactions}</p>
+            <p className="text-xl font-bold mt-2 text-blue-600">{formatCurrency(metrics?.mtdRevenue || 0)}</p>
+            <p className="text-xs text-muted-foreground">Bulan ini</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-orange-500">
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-orange-500" />
+              <span className="text-sm text-muted-foreground">Outstanding</span>
+            </div>
+            <p className="text-xl font-bold mt-2 text-orange-600">{formatCurrency(metrics?.totalOutstanding || 0)}</p>
+            <p className="text-xs text-muted-foreground">Sisa cicilan</p>
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-purple-500">
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-purple-500" />
-              <span className="text-sm text-muted-foreground">Unique Clients</span>
+              <Wallet className="h-5 w-5 text-purple-500" />
+              <span className="text-sm text-muted-foreground">ARPC</span>
             </div>
-            <p className="text-2xl font-bold mt-2">{metrics?.uniqueClients.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Repeat className="h-5 w-5 text-amber-500" />
-              <span className="text-sm text-muted-foreground">Repeat Clients</span>
-            </div>
-            <p className="text-2xl font-bold mt-2">{metrics?.repeatClients.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">{metrics?.repeatRate.toFixed(1)}% rate</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-red-500">
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-red-500" />
-              <span className="text-sm text-muted-foreground">Unpaid &gt;7d</span>
-            </div>
-            <p className="text-2xl font-bold mt-2 text-red-600">{metrics?.unpaidOver7Days.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-primary">
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              <span className="text-sm text-muted-foreground">Data Trust</span>
-            </div>
-            <div className="mt-2">{metrics && getTrustBadge(metrics.trustScore)}</div>
+            <p className="text-xl font-bold mt-2 text-purple-600">{formatCurrency(metrics?.arpc || 0)}</p>
+            <p className="text-xs text-muted-foreground">Avg Revenue/Client</p>
           </CardContent>
         </Card>
       </div>
 
+      {/* B. SH2M Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">SH2M Paid</span>
+            </div>
+            <p className="text-lg font-bold mt-1">{metrics?.paidTransactions.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">{metrics?.paidRate.toFixed(1)}% rate</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Unique Clients</span>
+            </div>
+            <p className="text-lg font-bold mt-1">{metrics?.uniqueClients.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2">
+              <Repeat className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Repeat Clients</span>
+            </div>
+            <p className="text-lg font-bold mt-1">{metrics?.repeatClients.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">{metrics?.repeatRate.toFixed(1)}%</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2">
+              <Crown className="h-4 w-4 text-amber-500" />
+              <span className="text-xs text-muted-foreground">High Value</span>
+            </div>
+            <p className="text-lg font-bold mt-1 text-amber-600">{metrics?.highValueClients.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-red-500" />
+              <span className="text-xs text-muted-foreground">Unpaid &gt;7d</span>
+            </div>
+            <p className="text-lg font-bold mt-1 text-red-600">{metrics?.unpaidOver7Days.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="text-xs text-muted-foreground">Data Trust</span>
+            </div>
+            <div className="mt-1">{metrics && getTrustBadge(metrics.trustScore)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* C. Revenue by Branch + Payment Status */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* B. Branch Performance */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
               <Building2 className="h-5 w-5" />
-              Cabang Performance
+              Revenue by Branch
             </CardTitle>
-            <CardDescription>Performa per cabang (sorted by paid)</CardDescription>
+            <CardDescription>Perbandingan revenue per cabang</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -402,21 +593,96 @@ export default function CEODashboard() {
                 <TableRow>
                   <TableHead>Cabang</TableHead>
                   <TableHead className="text-right">Transaksi</TableHead>
-                  <TableHead className="text-right">Paid</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead className="text-right">Clients</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">Outstanding</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {metrics?.branchPerformance.map((b) => (
+                {metrics?.branchRevenueData.map((b) => (
                   <TableRow key={b.branch}>
                     <TableCell>
                       <Badge variant="outline">{b.branchLabel}</Badge>
                     </TableCell>
                     <TableCell className="text-right">{b.total.toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-semibold text-green-600">{b.paid.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{b.paidRate.toFixed(1)}%</TableCell>
-                    <TableCell className="text-right">{b.uniqueClients.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-semibold text-green-600">{formatCurrency(b.revenue)}</TableCell>
+                    <TableCell className="text-right text-orange-600">{formatCurrency(b.outstanding)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-bold bg-muted/50">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right">{metrics?.totalHighticket.toLocaleString()}</TableCell>
+                  <TableCell className="text-right text-green-600">{formatCurrency(metrics?.totalRevenue || 0)}</TableCell>
+                  <TableCell className="text-right text-orange-600">{formatCurrency(metrics?.totalOutstanding || 0)}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Percent className="h-5 w-5" />
+              Payment Status Distribution
+            </CardTitle>
+            <CardDescription>Breakdown status pembayaran highticket</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={metrics?.paymentStatusData || []}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={70}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {metrics?.paymentStatusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => value.toLocaleString()} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* D. EC Performance + Outstanding Receivables */}
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <UserCheck className="h-5 w-5" />
+              Top EC Performance
+            </CardTitle>
+            <CardDescription>Top 10 EC by revenue</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>EC Name</TableHead>
+                  <TableHead className="text-right">Transaksi</TableHead>
+                  <TableHead className="text-right">Revenue</TableHead>
+                  <TableHead className="text-right">Avg</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {metrics?.ecPerformance.map((ec, idx) => (
+                  <TableRow key={ec.ec}>
+                    <TableCell className="font-medium">{idx + 1}</TableCell>
+                    <TableCell>{ec.ec}</TableCell>
+                    <TableCell className="text-right">{ec.transactions}</TableCell>
+                    <TableCell className="text-right font-semibold text-green-600">{formatCurrency(ec.revenue)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatCurrency(ec.avgValue)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -424,46 +690,60 @@ export default function CEODashboard() {
           </CardContent>
         </Card>
 
-        {/* D. Client Value Overview */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
-              <UserCheck className="h-5 w-5" />
-              Client Value Overview
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Receipt className="h-5 w-5 text-orange-500" />
+              Top Outstanding Receivables
             </CardTitle>
-            <CardDescription>Ringkasan nilai client dari CRM</CardDescription>
+            <CardDescription>Client dengan sisa tagihan tertinggi</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-muted/30 rounded-lg text-center">
-                <p className="text-3xl font-bold">{metrics?.newClients.toLocaleString()}</p>
-                <p className="text-sm text-muted-foreground">New Clients</p>
+            {metrics?.outstandingByClient.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <CheckCircle className="h-10 w-10 mx-auto mb-2 text-green-500" />
+                <p>Tidak ada outstanding</p>
               </div>
-              <div className="p-4 bg-blue-50 rounded-lg text-center">
-                <p className="text-3xl font-bold text-blue-600">{metrics?.repeatClients.toLocaleString()}</p>
-                <p className="text-sm text-muted-foreground">Repeat Clients</p>
-              </div>
-              <div className="p-4 bg-amber-50 rounded-lg text-center">
-                <p className="text-3xl font-bold text-amber-600">{metrics?.highValueClients.toLocaleString()}</p>
-                <p className="text-sm text-muted-foreground">High Value</p>
-              </div>
-              <div className="p-4 bg-green-50 rounded-lg text-center">
-                <p className="text-3xl font-bold text-green-600">{metrics?.totalLTV.toLocaleString()}</p>
-                <p className="text-sm text-muted-foreground">Total LTV</p>
-              </div>
-            </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Sisa</TableHead>
+                    <TableHead className="text-right">Hari</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {metrics?.outstandingByClient.map((client) => (
+                    <TableRow key={client.id}>
+                      <TableCell className="max-w-[120px] truncate">{client.nama}</TableCell>
+                      <TableCell>
+                        <Badge variant={client.status === "DP" ? "default" : "secondary"}>{client.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-orange-600">{formatCurrency(client.remaining)}</TableCell>
+                      <TableCell className="text-right">
+                        <span className={client.days > 30 ? "text-red-600 font-semibold" : ""}>
+                          {client.days}d
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* C. Source Iklan Performance */}
+      {/* E. Source Iklan Performance */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5" />
             Top 10 Source Iklan Performance
           </CardTitle>
-          <CardDescription>Source iklan dengan paid tertinggi</CardDescription>
+          <CardDescription>Source iklan dengan paid tertinggi (SH2M)</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -503,7 +783,7 @@ export default function CEODashboard() {
         </CardContent>
       </Card>
 
-      {/* E. Risk & Alert Panel */}
+      {/* F. Risk & Alert Panel */}
       <Card className={metrics?.alerts.some(a => a.type === "critical") ? "border-red-300" : ""}>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
@@ -538,7 +818,7 @@ export default function CEODashboard() {
                     <span className="font-medium">{alert.message}</span>
                   </div>
                   <Badge className={alert.type === "critical" ? "bg-red-500" : "bg-yellow-500"}>
-                    {alert.count.toLocaleString()}
+                    {typeof alert.count === "number" ? alert.count.toLocaleString() : alert.count}
                   </Badge>
                 </div>
               ))}
