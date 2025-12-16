@@ -25,44 +25,76 @@ export default function SourceIklanCategories() {
   const { selectedBranch, getBranchFilter } = useBranch();
   const branchFilter = getBranchFilter();
 
-  // Get unique source_iklan from sh2m_data filtered by branch
+  // Get unique source_iklan from sh2m_data filtered by branch with pagination
   const { data: uniqueSourceIklan, isLoading: loadingUnique } = useQuery({
     queryKey: ["unique-source-iklan", selectedBranch],
     queryFn: async () => {
-      let query = supabase
-        .from("sh2m_data")
-        .select("source_iklan")
-        .order("source_iklan");
-      
-      // Filter by branch - use selectedBranch to determine the correct asal_iklan value
-      if (selectedBranch === "SEFT Bekasi") {
-        query = query.eq("asal_iklan", "SEFT Corp - Bekasi");
-      } else if (selectedBranch === "SEFT Jogja") {
-        query = query.eq("asal_iklan", "SEFT Corp - Jogja");
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("sh2m_data")
+          .select("source_iklan")
+          .range(from, from + PAGE_SIZE - 1)
+          .order("source_iklan");
+        
+        // Filter by branch - use selectedBranch to determine the correct asal_iklan value
+        if (selectedBranch === "SEFT Bekasi") {
+          query = query.eq("asal_iklan", "SEFT Corp - Bekasi");
+        } else if (selectedBranch === "SEFT Jogja") {
+          query = query.eq("asal_iklan", "SEFT Corp - Jogja");
+        }
+        // If SEFT ALL, don't filter - show all source_iklan
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
       }
-      // If SEFT ALL, don't filter - show all source_iklan
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
       
       // Get unique values
-      const unique = [...new Set(data.map(item => item.source_iklan))];
+      const unique = [...new Set(allData.map(item => item.source_iklan))];
       return unique;
     },
   });
 
-  // Get existing categories
+  // Get existing categories with pagination
   const { data: categories, isLoading: loadingCategories, refetch: refetchCategories } = useQuery({
     queryKey: ["source-iklan-categories", selectedBranch],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("source_iklan_categories")
-        .select("*")
-        .order("source_iklan");
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("source_iklan_categories")
+          .select("*")
+          .range(from, from + PAGE_SIZE - 1)
+          .order("source_iklan");
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
       
-      if (error) throw error;
-      return data;
+      return allData;
     },
   });
 
