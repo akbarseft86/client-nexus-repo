@@ -270,13 +270,12 @@ export default function CEODashboard() {
       .slice(0, 10);
 
     // ===== EC PERFORMANCE BY BRANCH (Line Chart Data) =====
-    const ecNames = ["Farah", "Intan", "Rizki", "Sefhia", "Yola"];
+    // Jogja EC names
+    const ecNamesJogja = ["Farah", "Intan", "Rizki", "Sefhia", "Yola"];
     
-    // Initialize EC stats for both branches
-    const ecRevenueBekasi: Record<string, number> = {};
+    // Initialize EC stats for Jogja
     const ecRevenueJogja: Record<string, number> = {};
-    ecNames.forEach(ec => {
-      ecRevenueBekasi[ec] = 0;
+    ecNamesJogja.forEach(ec => {
       ecRevenueJogja[ec] = 0;
     });
 
@@ -286,20 +285,15 @@ export default function CEODashboard() {
       const isPaid = d.status_payment === "Lunas" || d.status_payment === "Pelunasan";
       const revenue = isPaid ? Number(d.harga || 0) : 0;
 
-      if (ecNames.includes(ec)) {
-        if (branch.includes("Bekasi")) {
-          ecRevenueBekasi[ec] += revenue;
-        } else if (branch.includes("Jogja")) {
-          ecRevenueJogja[ec] += revenue;
-        }
+      if (ecNamesJogja.includes(ec) && branch.includes("Jogja")) {
+        ecRevenueJogja[ec] += revenue;
       }
     });
 
-    // Format for line chart - EC names on X axis
-    const ecRevenueChartData = ecNames.map(ec => ({
+    // Format for line chart - Jogja only
+    const ecRevenueChartJogja = ecNamesJogja.map(ec => ({
       ec,
-      Bekasi: ecRevenueBekasi[ec],
-      Jogja: ecRevenueJogja[ec],
+      Revenue: ecRevenueJogja[ec],
     }));
 
     // ===== PRODUCT PERFORMANCE BY CATEGORY =====
@@ -502,7 +496,7 @@ export default function CEODashboard() {
       branchRevenueData,
       // EC Performance
       ecPerformance,
-      ecRevenueChartData,
+      ecRevenueChartJogja,
       // Outstanding Clients
       outstandingByClient,
       // SH2M Metrics
@@ -956,48 +950,61 @@ export default function CEODashboard() {
         </Card>
       </div>
 
-      {/* EC Revenue per Branch - Line Chart */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <UserCheck className="h-5 w-5 text-primary" />
-            Revenue per EC - Perbandingan Cabang
-          </CardTitle>
-          <CardDescription>Total revenue per EC (Farah, Intan, Rizki, Sefhia, Yola) - Bekasi vs Jogja</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={metrics?.ecRevenueChartData || []} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="ec" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
-                <Tooltip 
-                  formatter={(value: number) => formatCurrency(value)}
-                  labelFormatter={(label) => `EC: ${label}`}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="Bekasi" 
-                  stroke="#3b82f6" 
-                  strokeWidth={2}
-                  dot={{ r: 5, fill: "#3b82f6" }}
-                  activeDot={{ r: 7 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="Jogja" 
-                  stroke="#22c55e" 
-                  strokeWidth={2}
-                  dot={{ r: 5, fill: "#22c55e" }}
-                  activeDot={{ r: 7 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      {/* EC Revenue per Branch - Separate Charts */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Bekasi EC - Placeholder */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <UserCheck className="h-5 w-5 text-blue-500" />
+              Revenue per EC - Bekasi
+            </CardTitle>
+            <CardDescription>Total revenue per EC cabang Bekasi</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <UserCheck className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                <p>Data EC Bekasi belum tersedia</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Jogja EC */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <UserCheck className="h-5 w-5 text-green-500" />
+              Revenue per EC - Jogja
+            </CardTitle>
+            <CardDescription>Total revenue per EC (Farah, Intan, Rizki, Sefhia, Yola)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={metrics?.ecRevenueChartJogja || []} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="ec" tick={{ fontSize: 12 }} />
+                  <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                  <Tooltip 
+                    formatter={(value: number) => formatCurrency(value)}
+                    labelFormatter={(label) => `EC: ${label}`}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="Revenue" 
+                    stroke="#22c55e" 
+                    strokeWidth={2}
+                    dot={{ r: 5, fill: "#22c55e" }}
+                    activeDot={{ r: 7 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* E. Top Product Performance */}
       <div className="grid md:grid-cols-3 gap-6">
