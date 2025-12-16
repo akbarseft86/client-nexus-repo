@@ -1,4 +1,4 @@
-import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle, Shield, Users } from "lucide-react";
+import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle, Shield, Users, BarChart3 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,15 +23,16 @@ export default function Navigation() {
 
   const menuItems = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", hideInPreview: false },
+    { to: "/ceo-dashboard", icon: BarChart3, label: "CEO Command Center", showOnlyInPreview: true },
     { to: "/", icon: Database, label: "Data SH2M", hideInPreview: false },
     { to: "/highticket", icon: FileText, label: "Data Highticket", hideInPreview: false },
     { to: "/cicilan", icon: CreditCard, label: "Data Cicilan", hideInPreview: true },
     { to: "/search", icon: Search, label: "Pencarian Client", hideInPreview: false },
     { to: "/source-categories", icon: Tags, label: "Kategori Source Iklan", hideInPreview: true },
     { to: "/leads-ec", icon: UserCheck, label: "Leads EC", hideInPreview: false },
+    { to: "/clients", icon: Users, label: "Clients CRM", showOnlyInPreview: true },
     { to: "/data-duplikat", icon: AlertTriangle, label: "Data Duplikat", showOnlyInPreview: true },
     { to: "/data-trust", icon: Shield, label: "Data Trust", showOnlyInPreview: true },
-    { to: "/clients", icon: Users, label: "Clients CRM", showOnlyInPreview: true },
   ];
 
   const visibleMenuItems = menuItems.filter(item => {

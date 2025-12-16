@@ -15,6 +15,7 @@ import LeadsEC from "@/pages/LeadsEC";
 import DataDuplikat from "@/pages/DataDuplikat";
 import DataTrust from "@/pages/DataTrust";
 import ClientsCRM from "@/pages/ClientsCRM";
+import CEODashboard from "@/pages/CEODashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
                 <Route path="/data-duplikat" element={<DataDuplikat />} />
                 <Route path="/data-trust" element={<DataTrust />} />
                 <Route path="/clients" element={<ClientsCRM />} />
+                <Route path="/ceo-dashboard" element={<CEODashboard />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
