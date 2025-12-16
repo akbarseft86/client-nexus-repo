@@ -89,37 +89,70 @@ export default function CicilanData() {
   const { data: cicilanData, isLoading } = useQuery({
     queryKey: ["cicilan-data", branchFilter],
     queryFn: async () => {
-      let query = supabase
-        .from("highticket_data")
-        .select("*")
-        .in("status_payment", ["DP", "Angsuran"])
-        .order("tanggal_transaksi", { ascending: false });
-      
-      // Filter by asal_iklan directly on highticket_data
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
+      // Fetch with pagination (Supabase has 1000 row limit)
+      const PAGE_SIZE = 1000;
+      let allHighticketData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("highticket_data")
+          .select("*")
+          .in("status_payment", ["DP", "Angsuran"])
+          .range(from, from + PAGE_SIZE - 1)
+          .order("tanggal_transaksi", { ascending: false });
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allHighticketData = [...allHighticketData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
       }
-      
-      const { data: highticketData, error: htError } = await query;
-      if (htError) throw htError;
 
       // Fetch all payment histories
-      const highticketIds = highticketData?.map((ht) => ht.id) || [];
+      const highticketIds = allHighticketData.map((ht) => ht.id);
       
       let paymentsData: PaymentHistory[] = [];
       if (highticketIds.length > 0) {
-        const { data: payments, error: payError } = await supabase
-          .from("payment_history")
-          .select("*")
-          .in("highticket_id", highticketIds)
-          .order("tanggal_bayar", { ascending: true });
+        // Fetch payments with pagination
+        let allPayments: PaymentHistory[] = [];
+        from = 0;
+        hasMore = true;
+        
+        while (hasMore) {
+          const { data: payments, error: payError } = await supabase
+            .from("payment_history")
+            .select("*")
+            .in("highticket_id", highticketIds)
+            .range(from, from + PAGE_SIZE - 1)
+            .order("tanggal_bayar", { ascending: true });
 
-        if (payError) throw payError;
-        paymentsData = (payments || []) as PaymentHistory[];
+          if (payError) throw payError;
+          
+          if (payments && payments.length > 0) {
+            allPayments = [...allPayments, ...(payments as PaymentHistory[])];
+            from += PAGE_SIZE;
+            hasMore = payments.length === PAGE_SIZE;
+          } else {
+            hasMore = false;
+          }
+        }
+        
+        paymentsData = allPayments;
       }
 
       // Combine data
-      const combinedData: HighticketWithPayments[] = (highticketData || []).map((ht) => {
+      const combinedData: HighticketWithPayments[] = allHighticketData.map((ht) => {
         const payments = paymentsData.filter((p) => p.highticket_id === ht.id);
         const totalPaid = payments.reduce((sum, p) => sum + Number(p.jumlah_bayar), 0);
         // Use harga_bayar as target if available, otherwise use harga

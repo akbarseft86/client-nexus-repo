@@ -199,37 +199,72 @@ export default function HighticketData() {
   const { data: highticketData, isLoading } = useQuery({
     queryKey: ["highticket-data", branchFilter],
     queryFn: async () => {
-      let query = supabase
-        .from("highticket_data")
-        .select("*")
-        .order("tanggal_transaksi", { ascending: false });
-      
-      // Filter by asal_iklan directly on highticket_data
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
+      // Fetch with pagination (Supabase has 1000 row limit)
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("highticket_data")
+          .select("*")
+          .range(from, from + PAGE_SIZE - 1)
+          .order("tanggal_transaksi", { ascending: false });
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
       }
       
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      return allData;
     },
   });
 
   const { data: clients } = useQuery({
     queryKey: ["sh2m-clients", branchFilter],
     queryFn: async () => {
-      let query = supabase
-        .from("sh2m_data")
-        .select("client_id, nama_client, nohp_client, tanggal")
-        .order("nama_client");
-      
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
+      // Fetch with pagination (Supabase has 1000 row limit)
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("sh2m_data")
+          .select("client_id, nama_client, nohp_client, tanggal")
+          .range(from, from + PAGE_SIZE - 1)
+          .order("nama_client");
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
       }
       
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      return allData;
     },
   });
 

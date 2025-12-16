@@ -64,30 +64,64 @@ export default function ClientsCRM() {
   const [selectedClient, setSelectedClient] = useState<ClientProfile | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  // Fetch all SH2M data
+  // Fetch all SH2M data with pagination
   const { data: sh2mData, isLoading } = useQuery({
     queryKey: ["clients-crm-sh2m"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sh2m_data")
-        .select("*")
-        .order("tanggal", { ascending: false });
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
 
-      if (error) throw error;
-      return data || [];
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("sh2m_data")
+          .select("*")
+          .range(from, from + PAGE_SIZE - 1)
+          .order("tanggal", { ascending: false });
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      return allData;
     },
   });
 
-  // Fetch branch assignments for duplicates
+  // Fetch branch assignments for duplicates with pagination
   const { data: branchAssignments } = useQuery({
     queryKey: ["clients-crm-assignments"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("duplicate_branch_assignments")
-        .select("*");
+      const PAGE_SIZE = 1000;
+      let allData: BranchAssignment[] = [];
+      let from = 0;
+      let hasMore = true;
 
-      if (error) throw error;
-      return (data || []) as BranchAssignment[];
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("duplicate_branch_assignments")
+          .select("*")
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...(data as BranchAssignment[])];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      return allData;
     },
   });
 

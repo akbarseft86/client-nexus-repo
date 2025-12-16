@@ -31,35 +31,66 @@ const LeadsEC = () => {
   const { data: leadsData, isLoading } = useQuery({
     queryKey: ["leads-ec", branchFilter],
     queryFn: async () => {
-      // Fetch paid SH2M data
-      let query = supabase
-        .from("sh2m_data")
-        .select("*")
-        .eq("status_payment", "paid")
-        .order("tanggal", { ascending: false })
-        .order("jam", { ascending: false });
-      
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
+      // Fetch paid SH2M data with pagination (Supabase has 1000 row limit)
+      const PAGE_SIZE = 1000;
+      let allSh2mData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("sh2m_data")
+          .select("*")
+          .eq("status_payment", "paid")
+          .range(from, from + PAGE_SIZE - 1)
+          .order("tanggal", { ascending: false })
+          .order("jam", { ascending: false });
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allSh2mData = [...allSh2mData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
       }
       
-      const { data: sh2mRows, error: sh2mError } = await query;
-      if (sh2mError) throw sh2mError;
+      // Fetch categories with pagination
+      let allCategories: any[] = [];
+      from = 0;
+      hasMore = true;
       
-      // Fetch categories
-      const { data: categories, error: catError } = await supabase
-        .from("source_iklan_categories")
-        .select("source_iklan, kategori");
-      
-      if (catError) throw catError;
+      while (hasMore) {
+        const { data: categories, error: catError } = await supabase
+          .from("source_iklan_categories")
+          .select("source_iklan, kategori")
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (catError) throw catError;
+        
+        if (categories && categories.length > 0) {
+          allCategories = [...allCategories, ...categories];
+          from += PAGE_SIZE;
+          hasMore = categories.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
       
       // Create a map of source_iklan to kategori
       const categoryMap = new Map(
-        categories?.map(cat => [cat.source_iklan, cat.kategori]) || []
+        allCategories.map(cat => [cat.source_iklan, cat.kategori])
       );
       
       // Merge data
-      return sh2mRows?.map(row => ({
+      return allSh2mData.map(row => ({
         ...row,
         kategori: categoryMap.get(row.source_iklan) || '-'
       }));

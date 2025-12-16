@@ -63,31 +63,65 @@ export default function DataDuplikat() {
   const [selectedGroup, setSelectedGroup] = useState<DuplicateGroup | null>(null);
   const queryClient = useQueryClient();
 
-  // Fetch all SH2M data from both branches
+  // Fetch all SH2M data from both branches with pagination
   const { data: sh2mData, isLoading } = useQuery({
     queryKey: ["sh2m-all-data"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sh2m_data")
-        .select("*")
-        .order("tanggal", { ascending: false });
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("sh2m_data")
+          .select("*")
+          .range(from, from + PAGE_SIZE - 1)
+          .order("tanggal", { ascending: false });
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
       
-      if (error) throw error;
-      return data;
+      return allData;
     },
   });
 
-  // Fetch branch assignments
+  // Fetch branch assignments with pagination
   const { data: branchAssignments } = useQuery({
     queryKey: ["duplicate-branch-assignments", duplicateType],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("duplicate_branch_assignments")
-        .select("*")
-        .eq("duplicate_type", duplicateType);
+      const PAGE_SIZE = 1000;
+      let allData: BranchAssignment[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("duplicate_branch_assignments")
+          .select("*")
+          .eq("duplicate_type", duplicateType)
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...(data as BranchAssignment[])];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
       
-      if (error) throw error;
-      return data as BranchAssignment[];
+      return allData;
     },
   });
 

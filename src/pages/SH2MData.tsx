@@ -157,49 +157,79 @@ export default function SH2MData() {
   const { data: sh2mData, isLoading } = useQuery({
     queryKey: ["sh2m-data", filterDate, filterStatus, filterEC, filterAsalIklan, branchFilter],
     queryFn: async () => {
-      // Fetch SH2M data
-      let query = supabase.from("sh2m_data").select("*")
-        .order("tanggal", { ascending: false })
-        .order("jam", { ascending: false });
-      
-      // Filter by branch (only when not in preview mode)
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
-      }
-      
-      // Filter by asal_iklan (only in preview mode - SEFT ALL)
-      if (!branchFilter && filterAsalIklan) {
-        query = query.eq("asal_iklan", filterAsalIklan);
-      }
-      
-      if (filterDate) {
-        query = query.eq("tanggal", filterDate);
-      }
-      if (filterStatus) {
-        query = query.eq("status_payment", filterStatus);
-      }
-      if (filterEC) {
-        query = query.ilike("nama_ec", `%${filterEC}%`);
-      }
+      // Fetch SH2M data with pagination (Supabase has 1000 row limit)
+      const PAGE_SIZE = 1000;
+      let allSh2mData: any[] = [];
+      let from = 0;
+      let hasMore = true;
 
+      while (hasMore) {
+        let query = supabase.from("sh2m_data").select("*")
+          .range(from, from + PAGE_SIZE - 1)
+          .order("tanggal", { ascending: false })
+          .order("jam", { ascending: false });
+        
+        // Filter by branch (only when not in preview mode)
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        // Filter by asal_iklan (only in preview mode - SEFT ALL)
+        if (!branchFilter && filterAsalIklan) {
+          query = query.eq("asal_iklan", filterAsalIklan);
+        }
+        
+        if (filterDate) {
+          query = query.eq("tanggal", filterDate);
+        }
+        if (filterStatus) {
+          query = query.eq("status_payment", filterStatus);
+        }
+        if (filterEC) {
+          query = query.ilike("nama_ec", `%${filterEC}%`);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allSh2mData = [...allSh2mData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
       
-      const { data: sh2mRows, error: sh2mError } = await query;
-      if (sh2mError) throw sh2mError;
+      // Fetch categories with pagination
+      let allCategories: any[] = [];
+      from = 0;
+      hasMore = true;
       
-      // Fetch categories
-      const { data: categories, error: catError } = await supabase
-        .from("source_iklan_categories")
-        .select("source_iklan, kategori");
-      
-      if (catError) throw catError;
+      while (hasMore) {
+        const { data: categories, error: catError } = await supabase
+          .from("source_iklan_categories")
+          .select("source_iklan, kategori")
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (catError) throw catError;
+        
+        if (categories && categories.length > 0) {
+          allCategories = [...allCategories, ...categories];
+          from += PAGE_SIZE;
+          hasMore = categories.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
       
       // Create a map of source_iklan to kategori
       const categoryMap = new Map(
-        categories?.map(cat => [cat.source_iklan, cat.kategori]) || []
+        allCategories.map(cat => [cat.source_iklan, cat.kategori])
       );
       
       // Merge data
-      return sh2mRows?.map(row => ({
+      return allSh2mData.map(row => ({
         ...row,
         kategori: categoryMap.get(row.source_iklan) || '-'
       }));
