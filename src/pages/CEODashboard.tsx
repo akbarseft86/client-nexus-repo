@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   BarChart3, TrendingUp, Users, AlertTriangle, Shield, Crown, 
   Repeat, Building2, Target, Clock, CheckCircle, XCircle, AlertCircle,
-  DollarSign, Percent, UserCheck, CreditCard, Wallet, Receipt, Package
+  DollarSign, Percent, UserCheck, CreditCard, Wallet, Receipt, Package,
+  ArrowUp, ArrowDown, Minus, TrendingDown
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, differenceInDays, subDays, subMonths } from "date-fns";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from "recharts";
@@ -187,6 +188,38 @@ export default function CEODashboard() {
         (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
     });
     const mtdRevenue = mtdTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
+
+    // ===== MoM GROWTH CALCULATION =====
+    // Previous month revenue
+    const prevMonthStart = startOfMonth(subMonths(today, 1));
+    const prevMonthEnd = endOfMonth(subMonths(today, 1));
+    const prevMonthTransactions = highticketData.filter(d => {
+      const date = new Date(d.tanggal_transaksi);
+      return date >= prevMonthStart && date <= prevMonthEnd && 
+        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+    });
+    const prevMonthRevenue = prevMonthTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
+
+    // Calculate MoM Growth Rate
+    const momGrowthRate = prevMonthRevenue > 0 
+      ? ((mtdRevenue - prevMonthRevenue) / prevMonthRevenue) * 100 
+      : mtdRevenue > 0 ? 100 : 0;
+
+    // MoM Growth per Branch
+    const mtdBekasi = mtdTransactions.filter(d => d.asal_iklan?.includes("Bekasi")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const mtdJogja = mtdTransactions.filter(d => d.asal_iklan?.includes("Jogja")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const prevBekasi = prevMonthTransactions.filter(d => d.asal_iklan?.includes("Bekasi")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const prevJogja = prevMonthTransactions.filter(d => d.asal_iklan?.includes("Jogja")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    
+    const momGrowthBekasi = prevBekasi > 0 ? ((mtdBekasi - prevBekasi) / prevBekasi) * 100 : mtdBekasi > 0 ? 100 : 0;
+    const momGrowthJogja = prevJogja > 0 ? ((mtdJogja - prevJogja) / prevJogja) * 100 : mtdJogja > 0 ? 100 : 0;
+
+    // Transaction count MoM
+    const mtdTransactionCount = mtdTransactions.length;
+    const prevTransactionCount = prevMonthTransactions.length;
+    const momGrowthTransactions = prevTransactionCount > 0 
+      ? ((mtdTransactionCount - prevTransactionCount) / prevTransactionCount) * 100 
+      : mtdTransactionCount > 0 ? 100 : 0;
 
     // Outstanding (DP + Angsuran - payments made)
     const outstandingTransactions = filteredHighticket.filter(
@@ -489,6 +522,12 @@ export default function CEODashboard() {
       mtdRevenue,
       totalOutstanding,
       arpc,
+      // MoM Growth
+      momGrowthRate,
+      momGrowthBekasi,
+      momGrowthJogja,
+      momGrowthTransactions,
+      prevMonthRevenue,
       // Payment Status
       paymentStatusData,
       totalHighticket: filteredHighticket.length,
@@ -564,6 +603,53 @@ export default function CEODashboard() {
     if (score >= 90) return <Badge className="bg-green-500 text-white"><CheckCircle className="h-3 w-3 mr-1" />{score.toFixed(0)}%</Badge>;
     if (score >= 70) return <Badge className="bg-yellow-500 text-white"><AlertCircle className="h-3 w-3 mr-1" />{score.toFixed(0)}%</Badge>;
     return <Badge className="bg-red-500 text-white"><XCircle className="h-3 w-3 mr-1" />{score.toFixed(0)}%</Badge>;
+  };
+
+  // Growth Trend Indicator
+  const getGrowthIndicator = (growth: number, size: "sm" | "lg" = "sm") => {
+    const iconSize = size === "lg" ? "h-5 w-5" : "h-4 w-4";
+    const textSize = size === "lg" ? "text-lg font-bold" : "text-xs font-medium";
+    
+    if (growth > 10) {
+      return (
+        <div className={`flex items-center gap-1 text-green-600 ${textSize}`}>
+          <ArrowUp className={iconSize} />
+          <ArrowUp className={`${iconSize} -ml-3`} />
+          <span>+{growth.toFixed(1)}%</span>
+        </div>
+      );
+    }
+    if (growth > 0) {
+      return (
+        <div className={`flex items-center gap-1 text-green-600 ${textSize}`}>
+          <ArrowUp className={iconSize} />
+          <span>+{growth.toFixed(1)}%</span>
+        </div>
+      );
+    }
+    if (growth >= -1 && growth <= 1) {
+      return (
+        <div className={`flex items-center gap-1 text-yellow-600 ${textSize}`}>
+          <Minus className={iconSize} />
+          <span>{growth.toFixed(1)}%</span>
+        </div>
+      );
+    }
+    if (growth >= -10) {
+      return (
+        <div className={`flex items-center gap-1 text-red-600 ${textSize}`}>
+          <ArrowDown className={iconSize} />
+          <span>{growth.toFixed(1)}%</span>
+        </div>
+      );
+    }
+    return (
+      <div className={`flex items-center gap-1 text-red-600 ${textSize}`}>
+        <ArrowDown className={iconSize} />
+        <ArrowDown className={`${iconSize} -ml-3`} />
+        <span>{growth.toFixed(1)}%</span>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -648,7 +734,10 @@ export default function CEODashboard() {
               <span className="text-sm text-muted-foreground">MTD Revenue</span>
             </div>
             <p className="text-xl font-bold mt-2 text-blue-600">{formatCurrency(metrics?.mtdRevenue || 0)}</p>
-            <p className="text-xs text-muted-foreground">Bulan ini</p>
+            <div className="flex items-center gap-2 mt-1">
+              {metrics && getGrowthIndicator(metrics.momGrowthRate)}
+              <span className="text-xs text-muted-foreground">vs bulan lalu</span>
+            </div>
           </CardContent>
         </Card>
 
@@ -674,6 +763,50 @@ export default function CEODashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* MoM Growth Summary Card */}
+      <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            MoM Growth Summary
+          </CardTitle>
+          <CardDescription>Perbandingan pertumbuhan bulan ini vs bulan lalu</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Overall Growth */}
+            <div className="p-4 rounded-lg bg-background border">
+              <p className="text-sm text-muted-foreground mb-2">Revenue Growth</p>
+              {metrics && getGrowthIndicator(metrics.momGrowthRate, "lg")}
+              <p className="text-xs text-muted-foreground mt-2">
+                {formatCurrency(metrics?.prevMonthRevenue || 0)} → {formatCurrency(metrics?.mtdRevenue || 0)}
+              </p>
+            </div>
+            
+            {/* Bekasi Growth */}
+            <div className="p-4 rounded-lg bg-background border">
+              <p className="text-sm text-muted-foreground mb-2">Bekasi</p>
+              {metrics && getGrowthIndicator(metrics.momGrowthBekasi, "lg")}
+              <Badge variant="outline" className="mt-2 text-blue-600 border-blue-300">Bekasi</Badge>
+            </div>
+            
+            {/* Jogja Growth */}
+            <div className="p-4 rounded-lg bg-background border">
+              <p className="text-sm text-muted-foreground mb-2">Jogja</p>
+              {metrics && getGrowthIndicator(metrics.momGrowthJogja, "lg")}
+              <Badge variant="outline" className="mt-2 text-green-600 border-green-300">Jogja</Badge>
+            </div>
+            
+            {/* Transaction Growth */}
+            <div className="p-4 rounded-lg bg-background border">
+              <p className="text-sm text-muted-foreground mb-2">Transaksi</p>
+              {metrics && getGrowthIndicator(metrics.momGrowthTransactions, "lg")}
+              <p className="text-xs text-muted-foreground mt-2">Jumlah transaksi paid</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* B. SH2M Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
