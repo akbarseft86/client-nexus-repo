@@ -1,4 +1,4 @@
-import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle } from "lucide-react";
+import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle, Shield } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +30,7 @@ export default function Navigation() {
     { to: "/source-categories", icon: Tags, label: "Kategori Source Iklan", hideInPreview: true },
     { to: "/leads-ec", icon: UserCheck, label: "Leads EC", hideInPreview: false },
     { to: "/data-duplikat", icon: AlertTriangle, label: "Data Duplikat", showOnlyInPreview: true },
+    { to: "/data-trust", icon: Shield, label: "Data Trust", showOnlyInPreview: true },
   ];
 
   const visibleMenuItems = menuItems.filter(item => {
