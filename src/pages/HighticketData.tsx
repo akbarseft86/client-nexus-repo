@@ -161,6 +161,10 @@ export default function HighticketData() {
   const [filterNamaEC, setFilterNamaEC] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   
+  // Form states for controlled inputs
+  const [addFormStatusPayment, setAddFormStatusPayment] = useState("Lunas");
+  const [editFormStatusPayment, setEditFormStatusPayment] = useState("");
+  
   const { getBranchFilter, selectedBranch } = useBranch();
   const branchFilter = getBranchFilter();
   const isPreviewMode = selectedBranch === "SEFT ALL";
@@ -296,6 +300,7 @@ export default function HighticketData() {
       setSelectedClient(null);
       setSearchClientId("");
       setPreviewImage(null);
+      setAddFormStatusPayment("Lunas");
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
     onError: () => {
@@ -372,6 +377,7 @@ export default function HighticketData() {
 
   const handleEdit = (row: any) => {
     setEditingData(row);
+    setEditFormStatusPayment(row.status_payment || "Lunas");
     setEditDialogOpen(true);
   };
 
@@ -790,11 +796,23 @@ export default function HighticketData() {
                   </div>
                   <div>
                     <Label htmlFor="harga_bayar">Harga Bayar (jika DP)</Label>
-                    <Input id="harga_bayar" name="harga_bayar" type="number" placeholder="Kosongkan jika Lunas" />
+                    <Input 
+                      id="harga_bayar" 
+                      name="harga_bayar" 
+                      type="number" 
+                      placeholder={addFormStatusPayment === "DP" ? "Masukkan harga bayar" : "Hanya untuk status DP"}
+                      disabled={addFormStatusPayment !== "DP"}
+                      className={addFormStatusPayment !== "DP" ? "bg-muted cursor-not-allowed" : ""}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="status_payment">Status Payment</Label>
-                    <Select name="status_payment" defaultValue="Lunas" required>
+                    <Select 
+                      name="status_payment" 
+                      value={addFormStatusPayment} 
+                      onValueChange={setAddFormStatusPayment}
+                      required
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -1166,12 +1184,19 @@ export default function HighticketData() {
                     name="harga_bayar" 
                     type="number" 
                     defaultValue={editingData.harga_bayar || ''}
-                    placeholder="Kosongkan jika Lunas"
+                    placeholder={editFormStatusPayment === "DP" ? "Masukkan harga bayar" : "Hanya untuk status DP"}
+                    disabled={editFormStatusPayment !== "DP"}
+                    className={editFormStatusPayment !== "DP" ? "bg-muted cursor-not-allowed" : ""}
                   />
                 </div>
                 <div>
                   <Label htmlFor="edit_status_payment">Status Payment</Label>
-                  <Select name="status_payment" defaultValue={editingData.status_payment} required>
+                  <Select 
+                    name="status_payment" 
+                    value={editFormStatusPayment}
+                    onValueChange={setEditFormStatusPayment}
+                    required
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
