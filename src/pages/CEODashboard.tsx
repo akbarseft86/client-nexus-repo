@@ -264,21 +264,39 @@ export default function CEODashboard() {
       : selectedTransactionCount > 0 ? 100 : 0;
 
     // Full year comparison
-    const currentYearRevenue = highticketData.filter(d => {
+    const currentYearData = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
       return date.getFullYear() === selectedYear && 
         (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
-    }).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    });
+    const currentYearRevenue = currentYearData.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
-    const previousYearRevenue = highticketData.filter(d => {
+    const previousYearData = highticketData.filter(d => {
       const date = new Date(d.tanggal_transaksi);
       return date.getFullYear() === selectedYear - 1 && 
         (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
-    }).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    });
+    const previousYearRevenue = previousYearData.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
     const yoyFullYearGrowth = previousYearRevenue > 0 
       ? ((currentYearRevenue - previousYearRevenue) / previousYearRevenue) * 100 
       : currentYearRevenue > 0 ? 100 : 0;
+
+    // Full year branch comparison
+    const currentYearBekasi = currentYearData.filter(d => d.asal_iklan?.includes("Bekasi")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const currentYearJogja = currentYearData.filter(d => d.asal_iklan?.includes("Jogja")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const previousYearBekasi = previousYearData.filter(d => d.asal_iklan?.includes("Bekasi")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const previousYearJogja = previousYearData.filter(d => d.asal_iklan?.includes("Jogja")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    
+    const yoyFullYearBekasi = previousYearBekasi > 0 ? ((currentYearBekasi - previousYearBekasi) / previousYearBekasi) * 100 : currentYearBekasi > 0 ? 100 : 0;
+    const yoyFullYearJogja = previousYearJogja > 0 ? ((currentYearJogja - previousYearJogja) / previousYearJogja) * 100 : currentYearJogja > 0 ? 100 : 0;
+
+    // Full year transaction count
+    const currentYearTransCount = currentYearData.length;
+    const previousYearTransCount = previousYearData.length;
+    const yoyFullYearTransactions = previousYearTransCount > 0 
+      ? ((currentYearTransCount - previousYearTransCount) / previousYearTransCount) * 100 
+      : currentYearTransCount > 0 ? 100 : 0;
 
     // Outstanding (DP + Angsuran - payments made)
     const outstandingTransactions = filteredHighticket.filter(
@@ -587,16 +605,20 @@ export default function CEODashboard() {
       momGrowthJogja,
       momGrowthTransactions,
       prevMonthRevenue,
-      // YoY Growth
+      // YoY Growth (Monthly)
       yoyGrowthRate,
       yoyGrowthBekasi,
       yoyGrowthJogja,
       yoyGrowthTransactions,
       lastYearRevenue,
       selectedMonthRevenue,
+      // YoY Growth (Full Year)
       currentYearRevenue,
       previousYearRevenue,
       yoyFullYearGrowth,
+      yoyFullYearBekasi,
+      yoyFullYearJogja,
+      yoyFullYearTransactions,
       // Payment Status
       paymentStatusData,
       totalHighticket: filteredHighticket.length,
@@ -877,53 +899,100 @@ export default function CEODashboard() {
         </CardContent>
       </Card>
 
-      {/* YoY Growth Summary Card */}
-      <Card className="border-2 border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <BarChart3 className="h-5 w-5 text-amber-500" />
-            YoY Growth Summary
-          </CardTitle>
-          <CardDescription>
-            Perbandingan bulan {monthNames[selectedMonth]} {selectedYear} vs {monthNames[selectedMonth]} {selectedYear - 1}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Overall YoY Growth */}
-            <div className="p-4 rounded-lg bg-background border">
-              <p className="text-sm text-muted-foreground mb-2">Revenue YoY</p>
-              {metrics && getGrowthIndicator(metrics.yoyGrowthRate, "lg")}
-              <p className="text-xs text-muted-foreground mt-2">
-                {formatCurrency(metrics?.lastYearRevenue || 0)} → {formatCurrency(metrics?.selectedMonthRevenue || 0)}
-              </p>
+      {/* YoY Growth Summary Card - 2 Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Section 1: Monthly YoY */}
+        <Card className="border-2 border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <BarChart3 className="h-5 w-5 text-amber-500" />
+              YoY Growth - Bulanan
+            </CardTitle>
+            <CardDescription>
+              {monthNames[selectedMonth]} {selectedYear} vs {monthNames[selectedMonth]} {selectedYear - 1}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Overall YoY Growth */}
+              <div className="p-4 rounded-lg bg-background border">
+                <p className="text-sm text-muted-foreground mb-2">Revenue</p>
+                {metrics && getGrowthIndicator(metrics.yoyGrowthRate, "lg")}
+                <p className="text-xs text-muted-foreground mt-2">
+                  {formatCurrency(metrics?.lastYearRevenue || 0)} → {formatCurrency(metrics?.selectedMonthRevenue || 0)}
+                </p>
+              </div>
+              
+              {/* Transaction YoY */}
+              <div className="p-4 rounded-lg bg-background border">
+                <p className="text-sm text-muted-foreground mb-2">Transaksi</p>
+                {metrics && getGrowthIndicator(metrics.yoyGrowthTransactions, "lg")}
+                <p className="text-xs text-muted-foreground mt-2">Jumlah transaksi paid</p>
+              </div>
+              
+              {/* Bekasi YoY */}
+              <div className="p-4 rounded-lg bg-background border">
+                <p className="text-sm text-muted-foreground mb-2">Bekasi</p>
+                {metrics && getGrowthIndicator(metrics.yoyGrowthBekasi, "lg")}
+                <Badge variant="outline" className="mt-2 text-blue-600 border-blue-300">Bekasi</Badge>
+              </div>
+              
+              {/* Jogja YoY */}
+              <div className="p-4 rounded-lg bg-background border">
+                <p className="text-sm text-muted-foreground mb-2">Jogja</p>
+                {metrics && getGrowthIndicator(metrics.yoyGrowthJogja, "lg")}
+                <Badge variant="outline" className="mt-2 text-green-600 border-green-300">Jogja</Badge>
+              </div>
             </div>
-            
-            {/* Bekasi YoY */}
-            <div className="p-4 rounded-lg bg-background border">
-              <p className="text-sm text-muted-foreground mb-2">Bekasi YoY</p>
-              {metrics && getGrowthIndicator(metrics.yoyGrowthBekasi, "lg")}
-              <Badge variant="outline" className="mt-2 text-blue-600 border-blue-300">Bekasi</Badge>
+          </CardContent>
+        </Card>
+
+        {/* Section 2: Full Year YoY */}
+        <Card className="border-2 border-cyan-500/20 bg-gradient-to-r from-cyan-500/5 to-transparent">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <TrendingUp className="h-5 w-5 text-cyan-500" />
+              YoY Growth - Tahunan
+            </CardTitle>
+            <CardDescription>
+              Full Year {selectedYear} vs Full Year {selectedYear - 1}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Overall Full Year Growth */}
+              <div className="p-4 rounded-lg bg-background border">
+                <p className="text-sm text-muted-foreground mb-2">Revenue</p>
+                {metrics && getGrowthIndicator(metrics.yoyFullYearGrowth, "lg")}
+                <p className="text-xs text-muted-foreground mt-2">
+                  {formatCurrency(metrics?.previousYearRevenue || 0)} → {formatCurrency(metrics?.currentYearRevenue || 0)}
+                </p>
+              </div>
+              
+              {/* Transaction Full Year YoY */}
+              <div className="p-4 rounded-lg bg-background border">
+                <p className="text-sm text-muted-foreground mb-2">Transaksi</p>
+                {metrics && getGrowthIndicator(metrics.yoyFullYearTransactions, "lg")}
+                <p className="text-xs text-muted-foreground mt-2">Jumlah transaksi paid</p>
+              </div>
+              
+              {/* Bekasi Full Year YoY */}
+              <div className="p-4 rounded-lg bg-background border">
+                <p className="text-sm text-muted-foreground mb-2">Bekasi</p>
+                {metrics && getGrowthIndicator(metrics.yoyFullYearBekasi, "lg")}
+                <Badge variant="outline" className="mt-2 text-blue-600 border-blue-300">Bekasi</Badge>
+              </div>
+              
+              {/* Jogja Full Year YoY */}
+              <div className="p-4 rounded-lg bg-background border">
+                <p className="text-sm text-muted-foreground mb-2">Jogja</p>
+                {metrics && getGrowthIndicator(metrics.yoyFullYearJogja, "lg")}
+                <Badge variant="outline" className="mt-2 text-green-600 border-green-300">Jogja</Badge>
+              </div>
             </div>
-            
-            {/* Jogja YoY */}
-            <div className="p-4 rounded-lg bg-background border">
-              <p className="text-sm text-muted-foreground mb-2">Jogja YoY</p>
-              {metrics && getGrowthIndicator(metrics.yoyGrowthJogja, "lg")}
-              <Badge variant="outline" className="mt-2 text-green-600 border-green-300">Jogja</Badge>
-            </div>
-            
-            {/* Full Year YoY */}
-            <div className="p-4 rounded-lg bg-background border">
-              <p className="text-sm text-muted-foreground mb-2">Full Year</p>
-              {metrics && getGrowthIndicator(metrics.yoyFullYearGrowth, "lg")}
-              <p className="text-xs text-muted-foreground mt-2">
-                {today.getFullYear() - 1} → {today.getFullYear()}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* B. SH2M Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
