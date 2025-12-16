@@ -72,20 +72,38 @@ export default function Dashboard() {
   
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-  // Get Total Revenue (All Time for this branch)
+  // Get Total Revenue (All Time for this branch) - fetch all records with pagination
   const { data: totalRevenue } = useQuery({
     queryKey: ["dashboard-total-revenue", branchFilter],
     queryFn: async () => {
-      let query = supabase.from("highticket_data").select("harga");
+      let allData: { harga: number }[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
       
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
+      while (hasMore) {
+        let query = supabase
+          .from("highticket_data")
+          .select("harga")
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          hasMore = data.length === pageSize;
+          page++;
+        } else {
+          hasMore = false;
+        }
       }
       
-      const { data, error } = await query;
-      if (error) throw error;
-      
-      return data?.reduce((sum, d) => sum + (d.harga || 0), 0) || 0;
+      return allData.reduce((sum, d) => sum + (d.harga || 0), 0);
     },
   });
 
