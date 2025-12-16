@@ -69,6 +69,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
+// Indonesian month names mapping
+const INDONESIAN_MONTHS: { [key: string]: number } = {
+  'januari': 0, 'februari': 1, 'maret': 2, 'april': 3, 'mei': 4, 'juni': 5,
+  'juli': 6, 'agustus': 7, 'september': 8, 'oktober': 9, 'november': 10, 'desember': 11
+};
+
 // Parse date from various formats for file upload
 const parseDateFromFile = (input: any): Date | null => {
   if (input == null) return null;
@@ -82,7 +88,20 @@ const parseDateFromFile = (input: any): Date | null => {
     return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
   }
 
-  // Try Indonesian format: DD/MM/YY(YY)
+  // Try Indonesian text format: "1 Juni 2025" or "01 Juni 2025"
+  const indoTextRegex = /^(\d{1,2})\s+(\w+)\s+(\d{4})$/i;
+  const indoTextMatch = str.match(indoTextRegex);
+  if (indoTextMatch) {
+    const day = parseInt(indoTextMatch[1], 10);
+    const monthName = indoTextMatch[2].toLowerCase();
+    const year = parseInt(indoTextMatch[3], 10);
+    const month = INDONESIAN_MONTHS[monthName];
+    if (month !== undefined) {
+      return new Date(year, month, day);
+    }
+  }
+
+  // Try Indonesian numeric format: DD/MM/YY(YY)
   const indoRegex = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})$/;
   const indoMatch = str.match(indoRegex);
   if (indoMatch) {
@@ -96,6 +115,16 @@ const parseDateFromFile = (input: any): Date | null => {
   if (!isNaN(parsed.getTime())) return parsed;
 
   return null;
+};
+
+// Parse Indonesian price format: "Rp385.000" or "Rp2.000.000"
+const parsePriceFromFile = (input: any): number => {
+  if (input == null) return 0;
+  const str = String(input).trim();
+  if (!str) return 0;
+  // Remove "Rp", dots (thousand separator), and spaces
+  const cleaned = str.replace(/[Rp\s.]/gi, '').replace(',', '.');
+  return parseFloat(cleaned) || 0;
 };
 
 const toYMD = (d: Date) => {
@@ -459,11 +488,12 @@ export default function HighticketData() {
         const rowProgress = 20 + Math.floor((i / totalRows) * 65);
         setUploadProgress(rowProgress);
 
-        // Map columns - support various naming conventions including user's format
-        // User's format: Kolom D = tanggal, Nama, NoHP, Product, Price, Status Payment, Closing by, SH2M Leads EC
+        // Map columns - support user's CSV format:
+        // Tanggal (Indonesian text: "1 Juni 2025"), Nama, NoHP, Product, Price (Rp385.000),
+        // Status Payment, Closing by, SH2M Leads EC, Kode Unik, Keterangan
         const tanggalTransaksi = parseDateFromFile(
           row.tanggal_transaksi || row['Tanggal Transaksi'] || row.tanggal || row.Tanggal ||
-          row['Tanggal'] || row['Date'] || row['__EMPTY_3'] // Column D might be __EMPTY_3
+          row['Tanggal'] || row['Date']
         );
         
         if (!tanggalTransaksi) {
@@ -472,14 +502,14 @@ export default function HighticketData() {
         }
 
         // Get nama - support multiple column names
-        const nama = row.nama || row.Nama || row.name || row.Name || '';
+        const nama = (row.nama || row.Nama || row.name || row.Name || '').trim();
         
-        // Get phone number - support multiple column names including "NoHP"
+        // Get phone number - support "NoHP" column
         const rawPhone = row.nohp || row['No HP'] || row.NoHP || row.phone || row.Phone || row['No. HP'] || '';
         const nohp = String(rawPhone).replace(/[^\d]/g, '');
         
-        // Get client ID - try from file first, then lookup by phone
-        let clientId = row.client_id || row['Client ID'] || row.ClientID || row.client || '';
+        // Get client ID - try "Kode Unik" first, then lookup by phone
+        let clientId = row['Kode Unik'] || row.client_id || row['Client ID'] || row.ClientID || row.client || '';
         if (!clientId && nohp) {
           // Lookup client_id from sh2m_data by phone number
           clientId = phoneToClientId.get(nohp) || '';
@@ -491,25 +521,24 @@ export default function HighticketData() {
           }
         }
         
-        // Category
+        // Category - default to 'Program'
         const category = row.category || row.Category || row.Kategori || 'Program';
         
         // Product/Program name - support "Product" column
         const namaProgram = row.nama_program || row['Nama Program'] || row.Product || row.product || row.Program || '';
         
-        // Price/Harga - support "Price" column
-        const hargaRaw = row.harga || row.Harga || row.Price || row.price || '0';
-        const harga = parseFloat(String(hargaRaw).replace(/[^\d.]/g, '')) || 0;
+        // Price/Harga - use parsePriceFromFile for "Rp385.000" format
+        const harga = parsePriceFromFile(row.harga || row.Harga || row.Price || row.price);
         
         // Status Payment
         const statusPayment = row.status_payment || row['Status Payment'] || row.StatusPayment || row.Status || 'Lunas';
         
-        // EC Name - support "Closing by" column
-        const namaEc = row.nama_ec || row['Nama EC'] || row['Closing by'] || row['Closing By'] || row.ClosingBy || '';
+        // EC Name - support "Closing by" column (note: there's also "Nama EC" column in the file)
+        const namaEc = row['Closing by'] || row['Closing By'] || row.nama_ec || row['Nama EC'] || row.ClosingBy || '';
         
-        // Tanggal SH2M - support "SH2M Leads EC" column
+        // Tanggal SH2M - support "SH2M Leads EC" column (DD/MM/YYYY format like "15/05/2025")
         const tanggalSh2m = parseDateFromFile(
-          row.tanggal_sh2m || row['Tanggal SH2M'] || row['SH2M Leads EC'] || row['SH2M'] || row.SH2M
+          row['SH2M Leads EC'] || row.tanggal_sh2m || row['Tanggal SH2M'] || row['SH2M'] || row.SH2M
         );
         
         // Pelaksanaan Program
