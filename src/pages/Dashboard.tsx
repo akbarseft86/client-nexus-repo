@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +42,55 @@ import {
   AreaChart,
 } from "recharts";
 
+// Helper function to fetch all paginated data from Supabase
+async function fetchAllPaginated<T>(
+  queryBuilder: () => ReturnType<typeof supabase.from>,
+  selectColumns: string,
+  filters?: {
+    branchFilter?: string | null;
+    dateRange?: { start: string; end: string };
+    statusFilter?: string[];
+  }
+): Promise<T[]> {
+  let allData: T[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+  
+  while (hasMore) {
+    let query = queryBuilder()
+      .select(selectColumns)
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+    
+    if (filters?.branchFilter) {
+      query = query.eq("asal_iklan", filters.branchFilter);
+    }
+    
+    if (filters?.dateRange) {
+      query = query
+        .gte("tanggal_transaksi", filters.dateRange.start)
+        .lte("tanggal_transaksi", filters.dateRange.end);
+    }
+    
+    if (filters?.statusFilter) {
+      query = query.in("status_payment", filters.statusFilter);
+    }
+    
+    const { data, error } = await query;
+    if (error) throw error;
+    
+    if (data && data.length > 0) {
+      allData = [...allData, ...data as T[]];
+      hasMore = data.length === pageSize;
+      page++;
+    } else {
+      hasMore = false;
+    }
+  }
+  
+  return allData;
+}
+
 export default function Dashboard() {
   const { getBranchFilter, selectedBranch } = useBranch();
   const branchFilter = getBranchFilter();
@@ -76,79 +125,49 @@ export default function Dashboard() {
   const { data: totalRevenue } = useQuery({
     queryKey: ["dashboard-total-revenue", branchFilter],
     queryFn: async () => {
-      let allData: { harga: number }[] = [];
-      let page = 0;
-      const pageSize = 1000;
-      let hasMore = true;
-      
-      while (hasMore) {
-        let query = supabase
-          .from("highticket_data")
-          .select("harga")
-          .range(page * pageSize, (page + 1) * pageSize - 1);
-        
-        if (branchFilter) {
-          query = query.eq("asal_iklan", branchFilter);
-        }
-        
-        const { data, error } = await query;
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allData = [...allData, ...data];
-          hasMore = data.length === pageSize;
-          page++;
-        } else {
-          hasMore = false;
-        }
-      }
-      
-      return allData.reduce((sum, d) => sum + (d.harga || 0), 0);
+      const data = await fetchAllPaginated<{ harga: number }>(
+        () => supabase.from("highticket_data"),
+        "harga",
+        { branchFilter }
+      );
+      return data.reduce((sum, d) => sum + (d.harga || 0), 0);
     },
   });
 
-  // Get Total Harga Bayar (DP/Angsuran transactions) - what should be paid
+  // Get Total Harga Bayar (DP/Angsuran transactions) - with pagination
   const { data: dpMetrics } = useQuery({
     queryKey: ["dashboard-dp-metrics", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      let query = supabase
-        .from("highticket_data")
-        .select("harga, harga_bayar, status_payment")
-        .in("status_payment", ["DP", "Angsuran"])
-        .gte("tanggal_transaksi", monthStartDate)
-        .lte("tanggal_transaksi", monthEndDate);
+      const data = await fetchAllPaginated<{ harga: number; harga_bayar: number | null; status_payment: string }>(
+        () => supabase.from("highticket_data"),
+        "harga, harga_bayar, status_payment",
+        { 
+          branchFilter, 
+          dateRange: { start: monthStartDate, end: monthEndDate },
+          statusFilter: ["DP", "Angsuran"]
+        }
+      );
       
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      
-      const totalHargaBayar = data?.reduce((sum, d) => sum + (d.harga_bayar || 0), 0) || 0;
-      const totalHarga = data?.reduce((sum, d) => sum + (d.harga || 0), 0) || 0;
-      const count = data?.length || 0;
+      const totalHargaBayar = data.reduce((sum, d) => sum + (d.harga_bayar || 0), 0);
+      const totalHarga = data.reduce((sum, d) => sum + (d.harga || 0), 0);
+      const count = data.length;
       
       return { totalHargaBayar, totalHarga, count };
     },
   });
 
-  // Get Monthly Revenue for the selected year (for monthly chart)
+  // Get Monthly Revenue for the selected year (for monthly chart) - with pagination
   const { data: monthlyRevenueData } = useQuery({
     queryKey: ["dashboard-monthly-revenue", branchFilter, selectedYear],
     queryFn: async () => {
-      let query = supabase
-        .from("highticket_data")
-        .select("tanggal_transaksi, harga")
-        .gte("tanggal_transaksi", yearStartDate)
-        .lte("tanggal_transaksi", yearEndDate);
-      
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = await fetchAllPaginated<{ tanggal_transaksi: string; harga: number }>(
+        () => supabase.from("highticket_data"),
+        "tanggal_transaksi, harga",
+        { 
+          branchFilter, 
+          dateRange: { start: yearStartDate, end: yearEndDate }
+        }
+      );
 
       // Group by month
       const monthlyData: Record<number, { revenue: number; transactions: number }> = {};
@@ -156,7 +175,7 @@ export default function Dashboard() {
         monthlyData[i] = { revenue: 0, transactions: 0 };
       }
 
-      data?.forEach(tx => {
+      data.forEach(tx => {
         const month = parseISO(tx.tanggal_transaksi).getMonth();
         monthlyData[month].revenue += tx.harga || 0;
         monthlyData[month].transactions++;
@@ -170,7 +189,7 @@ export default function Dashboard() {
     },
   });
 
-  // Get Weekly Revenue for the selected month (for weekly chart)
+  // Get Weekly Revenue for the selected month (for weekly chart) - with pagination
   const { data: weeklyRevenueData } = useQuery({
     queryKey: ["dashboard-weekly-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
@@ -179,30 +198,26 @@ export default function Dashboard() {
         { weekStartsOn: 1 }
       );
 
-      let query = supabase
-        .from("highticket_data")
-        .select("tanggal_transaksi, harga")
-        .gte("tanggal_transaksi", monthStartDate)
-        .lte("tanggal_transaksi", monthEndDate);
-      
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = await fetchAllPaginated<{ tanggal_transaksi: string; harga: number }>(
+        () => supabase.from("highticket_data"),
+        "tanggal_transaksi, harga",
+        { 
+          branchFilter, 
+          dateRange: { start: monthStartDate, end: monthEndDate }
+        }
+      );
 
       return weeks.map((weekStart, i) => {
         const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-        const weekRevenue = data?.filter(tx => {
+        const weekRevenue = data.filter(tx => {
           const txDate = parseISO(tx.tanggal_transaksi);
           return txDate >= weekStart && txDate <= weekEnd;
-        }).reduce((sum, tx) => sum + (tx.harga || 0), 0) || 0;
+        }).reduce((sum, tx) => sum + (tx.harga || 0), 0);
         
-        const weekTransactions = data?.filter(tx => {
+        const weekTransactions = data.filter(tx => {
           const txDate = parseISO(tx.tanggal_transaksi);
           return txDate >= weekStart && txDate <= weekEnd;
-        }).length || 0;
+        }).length;
 
         return {
           name: `Minggu ${i + 1}`,
@@ -213,7 +228,7 @@ export default function Dashboard() {
     },
   });
 
-  // Get Daily Revenue for the selected month (for daily chart)
+  // Get Daily Revenue for the selected month (for daily chart) - with pagination
   const { data: dailyRevenueData } = useQuery({
     queryKey: ["dashboard-daily-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
@@ -222,23 +237,19 @@ export default function Dashboard() {
         end: endOfMonth(selectedDate),
       });
 
-      let query = supabase
-        .from("highticket_data")
-        .select("tanggal_transaksi, harga")
-        .gte("tanggal_transaksi", monthStartDate)
-        .lte("tanggal_transaksi", monthEndDate);
-      
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = await fetchAllPaginated<{ tanggal_transaksi: string; harga: number }>(
+        () => supabase.from("highticket_data"),
+        "tanggal_transaksi, harga",
+        { 
+          branchFilter, 
+          dateRange: { start: monthStartDate, end: monthEndDate }
+        }
+      );
 
       return days.map(day => {
         const dayStr = format(day, 'yyyy-MM-dd');
-        const dayRevenue = data?.filter(tx => tx.tanggal_transaksi === dayStr)
-          .reduce((sum, tx) => sum + (tx.harga || 0), 0) || 0;
+        const dayRevenue = data.filter(tx => tx.tanggal_transaksi === dayStr)
+          .reduce((sum, tx) => sum + (tx.harga || 0), 0);
 
         return {
           name: format(day, 'd'),
@@ -248,26 +259,22 @@ export default function Dashboard() {
     },
   });
 
-  // Get Sales Trend by EC (revenue per EC for selected month)
+  // Get Sales Trend by EC (revenue per EC for selected month) - with pagination
   const { data: salesTrendData } = useQuery({
     queryKey: ["dashboard-sales-trend", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      let query = supabase
-        .from("highticket_data")
-        .select("nama_ec, harga")
-        .gte("tanggal_transaksi", monthStartDate)
-        .lte("tanggal_transaksi", monthEndDate);
-      
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = await fetchAllPaginated<{ nama_ec: string; harga: number }>(
+        () => supabase.from("highticket_data"),
+        "nama_ec, harga",
+        { 
+          branchFilter, 
+          dateRange: { start: monthStartDate, end: monthEndDate }
+        }
+      );
 
       // Group by EC name
       const ecRevenue: Record<string, number> = {};
-      data?.forEach(tx => {
+      data.forEach(tx => {
         const ec = tx.nama_ec || 'Tidak Ada EC';
         if (!ecRevenue[ec]) {
           ecRevenue[ec] = 0;
@@ -281,24 +288,20 @@ export default function Dashboard() {
     },
   });
 
-  // Get monthly revenue for selected month
+  // Get monthly revenue for selected month - with pagination
   const { data: currentMonthRevenue } = useQuery({
     queryKey: ["dashboard-current-month-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      let query = supabase
-        .from("highticket_data")
-        .select("harga")
-        .gte("tanggal_transaksi", monthStartDate)
-        .lte("tanggal_transaksi", monthEndDate);
+      const data = await fetchAllPaginated<{ harga: number }>(
+        () => supabase.from("highticket_data"),
+        "harga",
+        { 
+          branchFilter, 
+          dateRange: { start: monthStartDate, end: monthEndDate }
+        }
+      );
       
-      if (branchFilter) {
-        query = query.eq("asal_iklan", branchFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      
-      return data?.reduce((sum, d) => sum + (d.harga || 0), 0) || 0;
+      return data.reduce((sum, d) => sum + (d.harga || 0), 0);
     },
   });
 
