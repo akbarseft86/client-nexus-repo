@@ -677,6 +677,24 @@ export default function DataStaging() {
                     Hanya Perlu Diperbaiki ({invalidCount})
                   </label>
                 </div>
+                {showOnlyInvalid && invalidCount > 0 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    onClick={() => {
+                      const invalidIds = stagingData
+                        .filter(row => !isRowValid(row.validation))
+                        .map(row => row.id);
+                      setStagingData(prev => prev.filter(row => !invalidIds.includes(row.id)));
+                      setShowOnlyInvalid(false);
+                      toast.success(`${invalidIds.length} data invalid berhasil dihapus`);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Hapus Invalid ({invalidCount})
+                  </Button>
+                )}
                 <Button 
                   variant="destructive" 
                   size="sm"
