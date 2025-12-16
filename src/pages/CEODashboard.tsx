@@ -269,6 +269,37 @@ export default function CEODashboard() {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
+    // ===== EC PERFORMANCE BY BRANCH =====
+    const ecStatsBekasi: Record<string, { transactions: number; revenue: number }> = {};
+    const ecStatsJogja: Record<string, { transactions: number; revenue: number }> = {};
+
+    filteredHighticket.forEach(d => {
+      const ec = d.nama_ec || "Unknown";
+      const branch = d.asal_iklan || "";
+      const isPaid = d.status_payment === "Lunas" || d.status_payment === "Pelunasan";
+      const revenue = isPaid ? Number(d.harga || 0) : 0;
+
+      if (branch.includes("Bekasi")) {
+        if (!ecStatsBekasi[ec]) ecStatsBekasi[ec] = { transactions: 0, revenue: 0 };
+        ecStatsBekasi[ec].transactions++;
+        ecStatsBekasi[ec].revenue += revenue;
+      } else if (branch.includes("Jogja")) {
+        if (!ecStatsJogja[ec]) ecStatsJogja[ec] = { transactions: 0, revenue: 0 };
+        ecStatsJogja[ec].transactions++;
+        ecStatsJogja[ec].revenue += revenue;
+      }
+    });
+
+    const ecPerformanceBekasi = Object.entries(ecStatsBekasi)
+      .map(([ec, data]) => ({ ec, ...data }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+
+    const ecPerformanceJogja = Object.entries(ecStatsJogja)
+      .map(([ec, data]) => ({ ec, ...data }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+
     // ===== PRODUCT PERFORMANCE BY CATEGORY =====
     const productStats: Record<string, { 
       transactions: number; 
@@ -469,6 +500,8 @@ export default function CEODashboard() {
       branchRevenueData,
       // EC Performance
       ecPerformance,
+      ecPerformanceBekasi,
+      ecPerformanceJogja,
       // Outstanding Clients
       outstandingByClient,
       // SH2M Metrics
@@ -917,6 +950,101 @@ export default function CEODashboard() {
                   ))}
                 </TableBody>
               </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* EC Performance per Branch - Charts */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Bekasi EC */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <UserCheck className="h-5 w-5 text-blue-500" />
+              Revenue per EC - Bekasi
+            </CardTitle>
+            <CardDescription>Top EC berdasarkan revenue di cabang Bekasi</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {metrics?.ecPerformanceBekasi.length === 0 ? (
+              <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                Tidak ada data EC Bekasi
+              </div>
+            ) : (
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={metrics?.ecPerformanceBekasi || []} 
+                    layout="vertical"
+                    margin={{ left: 10, right: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis type="number" tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                    <YAxis 
+                      type="category" 
+                      dataKey="ec" 
+                      width={80} 
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => v.length > 10 ? v.substring(0, 10) + '...' : v}
+                    />
+                    <Tooltip 
+                      formatter={(value: number, name: string) => [
+                        formatCurrency(value), 
+                        name === "revenue" ? "Revenue" : "Transaksi"
+                      ]}
+                      labelFormatter={(label) => `EC: ${label}`}
+                    />
+                    <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Revenue" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Jogja EC */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <UserCheck className="h-5 w-5 text-green-500" />
+              Revenue per EC - Jogja
+            </CardTitle>
+            <CardDescription>Top EC berdasarkan revenue di cabang Jogja</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {metrics?.ecPerformanceJogja.length === 0 ? (
+              <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                Tidak ada data EC Jogja
+              </div>
+            ) : (
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={metrics?.ecPerformanceJogja || []} 
+                    layout="vertical"
+                    margin={{ left: 10, right: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis type="number" tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                    <YAxis 
+                      type="category" 
+                      dataKey="ec" 
+                      width={80} 
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => v.length > 10 ? v.substring(0, 10) + '...' : v}
+                    />
+                    <Tooltip 
+                      formatter={(value: number, name: string) => [
+                        formatCurrency(value), 
+                        name === "revenue" ? "Revenue" : "Transaksi"
+                      ]}
+                      labelFormatter={(label) => `EC: ${label}`}
+                    />
+                    <Bar dataKey="revenue" fill="#22c55e" radius={[0, 4, 4, 0]} name="Revenue" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </CardContent>
         </Card>
