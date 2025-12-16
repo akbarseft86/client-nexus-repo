@@ -11,7 +11,7 @@ import {
   DollarSign, Percent, UserCheck, CreditCard, Wallet, Receipt, Package
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, differenceInDays, subDays, subMonths } from "date-fns";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from "recharts";
 
 // Normalize phone number
 function normalizePhoneNumber(phone: string | null | undefined): string {
@@ -493,6 +493,45 @@ export default function CEODashboard() {
     };
   }, [filteredSh2m, filteredHighticket, sh2mData, highticketData, paymentHistory, categories]);
 
+  // Calculate yearly revenue trend by branch
+  const yearlyRevenueTrend = useMemo(() => {
+    if (!highticketData) return [];
+
+    // Filter data for selected year and paid status
+    const yearData = highticketData.filter(d => {
+      const date = new Date(d.tanggal_transaksi);
+      return date.getFullYear() === selectedYear && 
+        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+    });
+
+    // Initialize monthly data
+    const monthlyData: Record<number, { bekasi: number; jogja: number }> = {};
+    for (let i = 0; i < 12; i++) {
+      monthlyData[i] = { bekasi: 0, jogja: 0 };
+    }
+
+    // Aggregate revenue by month and branch
+    yearData.forEach(d => {
+      const month = new Date(d.tanggal_transaksi).getMonth();
+      const branch = d.asal_iklan || "";
+      const revenue = Number(d.harga || 0);
+
+      if (branch.includes("Bekasi")) {
+        monthlyData[month].bekasi += revenue;
+      } else if (branch.includes("Jogja")) {
+        monthlyData[month].jogja += revenue;
+      }
+    });
+
+    // Convert to array format for chart
+    return monthNames.map((name, index) => ({
+      month: name.substring(0, 3), // Short month name
+      Bekasi: monthlyData[index].bekasi,
+      Jogja: monthlyData[index].jogja,
+      Total: monthlyData[index].bekasi + monthlyData[index].jogja,
+    }));
+  }, [highticketData, selectedYear]);
+
   const getTrustBadge = (score: number) => {
     if (score >= 90) return <Badge className="bg-green-500 text-white"><CheckCircle className="h-3 w-3 mr-1" />{score.toFixed(0)}%</Badge>;
     if (score >= 70) return <Badge className="bg-yellow-500 text-white"><AlertCircle className="h-3 w-3 mr-1" />{score.toFixed(0)}%</Badge>;
@@ -672,6 +711,57 @@ export default function CEODashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Revenue Trend - Full Year by Branch */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Revenue Trend {selectedYear} - Per Cabang
+          </CardTitle>
+          <CardDescription>Perjalanan revenue bulanan Bekasi vs Jogja</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={yearlyRevenueTrend} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                <Tooltip 
+                  formatter={(value: number) => formatCurrency(value)}
+                  labelFormatter={(label) => `Bulan: ${label}`}
+                />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="Bekasi" 
+                  stroke="#3b82f6" 
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="Jogja" 
+                  stroke="#22c55e" 
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="Total" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={{ r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* C. Revenue by Branch + Payment Status */}
       <div className="grid md:grid-cols-2 gap-6">
