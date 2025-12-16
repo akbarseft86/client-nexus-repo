@@ -90,53 +90,70 @@ export default function CEODashboard() {
     }
   };
 
-  // Fetch all SH2M data
+  // Helper function to fetch all data with pagination (Supabase has 1000 row limit)
+  const fetchAllPaginated = async (
+    tableName: "sh2m_data" | "highticket_data" | "payment_history" | "source_iklan_categories",
+    orderBy?: { column: string; ascending: boolean }
+  ) => {
+    const PAGE_SIZE = 1000;
+    let allData: any[] = [];
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      let query = supabase
+        .from(tableName)
+        .select("*")
+        .range(from, from + PAGE_SIZE - 1);
+      
+      if (orderBy) {
+        query = query.order(orderBy.column, { ascending: orderBy.ascending });
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        allData = [...allData, ...data];
+        from += PAGE_SIZE;
+        hasMore = data.length === PAGE_SIZE;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allData;
+  };
+
+  // Fetch all SH2M data with pagination
   const { data: sh2mData, isLoading: loadingSh2m } = useQuery({
     queryKey: ["ceo-dashboard-sh2m"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sh2m_data")
-        .select("*")
-        .order("tanggal", { ascending: false });
-      if (error) throw error;
-      return data || [];
+      return fetchAllPaginated("sh2m_data", { column: "tanggal", ascending: false });
     },
   });
 
-  // Fetch all Highticket data
+  // Fetch all Highticket data with pagination
   const { data: highticketData, isLoading: loadingHighticket } = useQuery({
     queryKey: ["ceo-dashboard-highticket"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("highticket_data")
-        .select("*")
-        .order("tanggal_transaksi", { ascending: false });
-      if (error) throw error;
-      return data || [];
+      return fetchAllPaginated("highticket_data", { column: "tanggal_transaksi", ascending: false });
     },
   });
 
-  // Fetch payment history for outstanding calculation
+  // Fetch payment history with pagination
   const { data: paymentHistory } = useQuery({
     queryKey: ["ceo-dashboard-payments"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("payment_history")
-        .select("*");
-      if (error) throw error;
-      return data || [];
+      return fetchAllPaginated("payment_history");
     },
   });
 
-  // Fetch source categories
+  // Fetch source categories with pagination
   const { data: categories } = useQuery({
     queryKey: ["ceo-dashboard-categories"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("source_iklan_categories")
-        .select("*");
-      if (error) throw error;
-      return data || [];
+      return fetchAllPaginated("source_iklan_categories");
     },
   });
 
