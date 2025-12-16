@@ -4,12 +4,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Download, Filter, Pencil, Upload, Image, X } from "lucide-react";
+import { Plus, Trash2, Download, Filter, Pencil, Upload, Image, X, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { format, parseISO, isValid } from "date-fns";
 import { id } from "date-fns/locale";
 import { useBranch } from "@/contexts/BranchContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 
 const formatPelaksanaanProgram = (value: string | null): string => {
   if (!value) return '-';
@@ -62,6 +69,42 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
+// Parse date from various formats for file upload
+const parseDateFromFile = (input: any): Date | null => {
+  if (input == null) return null;
+  const str = String(input).trim();
+  if (!str) return null;
+
+  // Try ISO format: YYYY-MM-DD
+  const isoRegex = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
+  const isoMatch = str.match(isoRegex);
+  if (isoMatch) {
+    return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+  }
+
+  // Try Indonesian format: DD/MM/YY(YY)
+  const indoRegex = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})$/;
+  const indoMatch = str.match(indoRegex);
+  if (indoMatch) {
+    let year = parseInt(indoMatch[3], 10);
+    if (year < 100) year += 2000;
+    return new Date(year, parseInt(indoMatch[2]) - 1, parseInt(indoMatch[1]));
+  }
+
+  // Try parsing as Date
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) return parsed;
+
+  return null;
+};
+
+const toYMD = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export default function HighticketData() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -76,6 +119,12 @@ export default function HighticketData() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   
+  // Upload file states
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  
   // Filter states
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
@@ -83,8 +132,9 @@ export default function HighticketData() {
   const [filterNamaEC, setFilterNamaEC] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   
-  const { getBranchFilter } = useBranch();
+  const { getBranchFilter, selectedBranch } = useBranch();
   const branchFilter = getBranchFilter();
+  const isPreviewMode = selectedBranch === "SEFT ALL";
   
   const queryClient = useQueryClient();
 
@@ -362,18 +412,187 @@ export default function HighticketData() {
     setFilterCategory("all");
   };
 
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setSelectedFile(file || null);
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      toast.error("Pilih file terlebih dahulu");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    try {
+      setUploadProgress(5);
+      const data = await selectedFile.arrayBuffer();
+      setUploadProgress(10);
+      const workbook = XLSX.read(data, { type: 'array', FS: ';' });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
+      setUploadProgress(15);
+
+      const processedData: any[] = [];
+      const parsingErrors: string[] = [];
+      const totalRows = (jsonData as any[]).length;
+
+      for (let i = 0; i < totalRows; i++) {
+        const row = (jsonData as any[])[i];
+        const rowProgress = 15 + Math.floor((i / totalRows) * 70);
+        setUploadProgress(rowProgress);
+
+        // Map columns - support various naming conventions
+        const tanggalTransaksi = parseDateFromFile(
+          row.tanggal_transaksi || row['Tanggal Transaksi'] || row.tanggal || row.Tanggal
+        );
+        
+        if (!tanggalTransaksi) {
+          parsingErrors.push(`Baris ${i + 1}: tanggal tidak valid`);
+          continue;
+        }
+
+        const clientId = row.client_id || row['Client ID'] || row.client || '';
+        const nama = row.nama || row.Nama || row.name || '';
+        const nohp = String(row.nohp || row['No HP'] || row.phone || '').replace(/[^\d+]/g, '');
+        const category = row.category || row.Category || 'Program';
+        const namaProgram = row.nama_program || row['Nama Program'] || '';
+        const harga = parseFloat(String(row.harga || row.Harga || row.price || '0').replace(/[^\d.]/g, '')) || 0;
+        const statusPayment = row.status_payment || row['Status Payment'] || 'Lunas';
+        const namaEc = row.nama_ec || row['Nama EC'] || '';
+        
+        const tanggalSh2m = parseDateFromFile(row.tanggal_sh2m || row['Tanggal SH2M']);
+        const pelaksanaanProgram = parseDateFromFile(row.pelaksanaan_program || row['Pelaksanaan Program']);
+        const keterangan = row.keterangan || row.Keterangan || '';
+
+        if (!clientId || !nama) {
+          parsingErrors.push(`Baris ${i + 1}: client_id atau nama kosong`);
+          continue;
+        }
+
+        processedData.push({
+          tanggal_transaksi: toYMD(tanggalTransaksi),
+          client_id: clientId,
+          nama: nama,
+          nohp: nohp,
+          category: category,
+          nama_program: namaProgram,
+          harga: harga,
+          status_payment: statusPayment,
+          nama_ec: namaEc,
+          tanggal_sh2m: tanggalSh2m ? toYMD(tanggalSh2m) : null,
+          pelaksanaan_program: pelaksanaanProgram ? toYMD(pelaksanaanProgram) : null,
+          keterangan: keterangan,
+        });
+      }
+
+      if (parsingErrors.length > 0) {
+        console.error('Parsing errors:', parsingErrors);
+        toast.error(`${parsingErrors.length} baris gagal diparse`);
+      }
+
+      if (processedData.length === 0) {
+        toast.error("Tidak ada data valid untuk diupload");
+        return;
+      }
+
+      setUploadProgress(90);
+      const { error } = await supabase.from("highticket_data").insert(processedData);
+      
+      if (error) throw error;
+      
+      setUploadProgress(100);
+      toast.success(`${processedData.length} data berhasil diupload`);
+      queryClient.invalidateQueries({ queryKey: ["highticket-data"] });
+      setUploadDialogOpen(false);
+      setSelectedFile(null);
+    } catch (error) {
+      console.error(error);
+      toast.error("Gagal mengupload file");
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Data Client Highticket</h1>
         <div className="flex gap-2">
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Tambah Data
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon">
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-            </DialogTrigger>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportExcel}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Data
+              </DropdownMenuItem>
+              {!isPreviewMode && (
+                <>
+                  <DropdownMenuItem onClick={() => setUploadDialogOpen(true)}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload File
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDialogOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Tambah Manual
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Upload Dialog */}
+          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Upload File Highticket Data</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Pilih File (Excel/CSV)</Label>
+                  <Input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleFileSelect}
+                    className="mt-2"
+                  />
+                </div>
+                {selectedFile && (
+                  <p className="text-sm text-muted-foreground">
+                    File: {selectedFile.name}
+                  </p>
+                )}
+                {isUploading && (
+                  <div className="space-y-2">
+                    <Progress value={uploadProgress} className="h-2" />
+                    <p className="text-sm text-muted-foreground text-center">
+                      {uploadProgress}%
+                    </p>
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground">
+                  <p>Kolom yang didukung:</p>
+                  <p>tanggal_transaksi, client_id, nama, nohp, category, nama_program, harga, status_payment, nama_ec, tanggal_sh2m, pelaksanaan_program, keterangan</p>
+                </div>
+                <Button 
+                  onClick={handleFileUpload} 
+                  disabled={!selectedFile || isUploading}
+                  className="w-full"
+                >
+                  {isUploading ? `Uploading... ${uploadProgress}%` : "Upload"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Manual Add Dialog */}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Tambah Data Client Highticket</DialogTitle>
