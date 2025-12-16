@@ -2,7 +2,8 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, Trash2, Check, AlertCircle, Pencil, X, ArrowRight } from "lucide-react";
+import { Upload, Trash2, Check, AlertCircle, Pencil, X, ArrowRight, Filter } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
@@ -197,6 +198,7 @@ export default function DataStaging() {
   const [confirmAssign, setConfirmAssign] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [showOnlyInvalid, setShowOnlyInvalid] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Column mapping states
@@ -660,14 +662,30 @@ export default function DataStaging() {
                   Review dan edit data sebelum di-assign. Baris merah menandakan data tidak valid.
                 </CardDescription>
               </div>
-              <Button 
-                variant="destructive" 
-                size="sm"
-                onClick={() => setConfirmDeleteAll(true)}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Hapus Semua
-              </Button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Checkbox 
+                    id="filter-invalid" 
+                    checked={showOnlyInvalid}
+                    onCheckedChange={(checked) => setShowOnlyInvalid(checked === true)}
+                  />
+                  <label 
+                    htmlFor="filter-invalid" 
+                    className="text-sm font-medium cursor-pointer flex items-center gap-1"
+                  >
+                    <Filter className="h-4 w-4" />
+                    Hanya Perlu Diperbaiki ({invalidCount})
+                  </label>
+                </div>
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={() => setConfirmDeleteAll(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Hapus Semua
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -688,7 +706,9 @@ export default function DataStaging() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stagingData.map((row) => {
+                  {stagingData
+                    .filter(row => !showOnlyInvalid || !isRowValid(row.validation))
+                    .map((row) => {
                     const isValid = isRowValid(row.validation);
                     return (
                       <TableRow 
