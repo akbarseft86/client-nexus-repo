@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBranch } from "@/contexts/BranchContext";
-import { DollarSign, TrendingUp, BarChart3, Calendar } from "lucide-react";
+import { DollarSign, TrendingUp, BarChart3, Calendar, CreditCard, Receipt } from "lucide-react";
 import { 
   format, 
   startOfMonth, 
@@ -72,32 +72,14 @@ export default function Dashboard() {
   
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-  // Helper function to get client IDs for branch filter
-  const getClientIds = async () => {
-    if (!branchFilter) return null;
-    
-    const { data: sh2mClients } = await supabase
-      .from("sh2m_data")
-      .select("client_id")
-      .eq("asal_iklan", branchFilter);
-    
-    return sh2mClients?.map(c => c.client_id) || [];
-  };
-
   // Get Total Revenue (All Time for this branch)
   const { data: totalRevenue } = useQuery({
     queryKey: ["dashboard-total-revenue", branchFilter],
     queryFn: async () => {
-      const clientIds = await getClientIds();
-      
-      if (branchFilter && clientIds && clientIds.length === 0) {
-        return 0;
-      }
-
       let query = supabase.from("highticket_data").select("harga");
       
-      if (branchFilter && clientIds && clientIds.length > 0) {
-        query = query.in("client_id", clientIds);
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
       }
       
       const { data, error } = await query;
@@ -107,24 +89,44 @@ export default function Dashboard() {
     },
   });
 
+  // Get Total Harga Bayar (DP/Angsuran transactions) - what should be paid
+  const { data: dpMetrics } = useQuery({
+    queryKey: ["dashboard-dp-metrics", branchFilter, monthStartDate, monthEndDate],
+    queryFn: async () => {
+      let query = supabase
+        .from("highticket_data")
+        .select("harga, harga_bayar, status_payment")
+        .in("status_payment", ["DP", "Angsuran"])
+        .gte("tanggal_transaksi", monthStartDate)
+        .lte("tanggal_transaksi", monthEndDate);
+      
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      const totalHargaBayar = data?.reduce((sum, d) => sum + (d.harga_bayar || 0), 0) || 0;
+      const totalHarga = data?.reduce((sum, d) => sum + (d.harga || 0), 0) || 0;
+      const count = data?.length || 0;
+      
+      return { totalHargaBayar, totalHarga, count };
+    },
+  });
+
   // Get Monthly Revenue for the selected year (for monthly chart)
   const { data: monthlyRevenueData } = useQuery({
     queryKey: ["dashboard-monthly-revenue", branchFilter, selectedYear],
     queryFn: async () => {
-      const clientIds = await getClientIds();
-      
-      if (branchFilter && clientIds && clientIds.length === 0) {
-        return months.map(m => ({ name: m.label.substring(0, 3), revenue: 0, transactions: 0 }));
-      }
-
       let query = supabase
         .from("highticket_data")
         .select("tanggal_transaksi, harga")
         .gte("tanggal_transaksi", yearStartDate)
         .lte("tanggal_transaksi", yearEndDate);
       
-      if (branchFilter && clientIds && clientIds.length > 0) {
-        query = query.in("client_id", clientIds);
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
       }
       
       const { data, error } = await query;
@@ -154,16 +156,10 @@ export default function Dashboard() {
   const { data: weeklyRevenueData } = useQuery({
     queryKey: ["dashboard-weekly-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      const clientIds = await getClientIds();
-      
       const weeks = eachWeekOfInterval(
         { start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) },
         { weekStartsOn: 1 }
       );
-
-      if (branchFilter && clientIds && clientIds.length === 0) {
-        return weeks.map((_, i) => ({ name: `Minggu ${i + 1}`, revenue: 0, transactions: 0 }));
-      }
 
       let query = supabase
         .from("highticket_data")
@@ -171,8 +167,8 @@ export default function Dashboard() {
         .gte("tanggal_transaksi", monthStartDate)
         .lte("tanggal_transaksi", monthEndDate);
       
-      if (branchFilter && clientIds && clientIds.length > 0) {
-        query = query.in("client_id", clientIds);
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
       }
       
       const { data, error } = await query;
@@ -203,16 +199,10 @@ export default function Dashboard() {
   const { data: dailyRevenueData } = useQuery({
     queryKey: ["dashboard-daily-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      const clientIds = await getClientIds();
-      
       const days = eachDayOfInterval({
         start: startOfMonth(selectedDate),
         end: endOfMonth(selectedDate),
       });
-
-      if (branchFilter && clientIds && clientIds.length === 0) {
-        return days.map(day => ({ name: format(day, 'd'), revenue: 0 }));
-      }
 
       let query = supabase
         .from("highticket_data")
@@ -220,8 +210,8 @@ export default function Dashboard() {
         .gte("tanggal_transaksi", monthStartDate)
         .lte("tanggal_transaksi", monthEndDate);
       
-      if (branchFilter && clientIds && clientIds.length > 0) {
-        query = query.in("client_id", clientIds);
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
       }
       
       const { data, error } = await query;
@@ -244,20 +234,14 @@ export default function Dashboard() {
   const { data: salesTrendData } = useQuery({
     queryKey: ["dashboard-sales-trend", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      const clientIds = await getClientIds();
-
-      if (branchFilter && clientIds && clientIds.length === 0) {
-        return [];
-      }
-
       let query = supabase
         .from("highticket_data")
         .select("nama_ec, harga")
         .gte("tanggal_transaksi", monthStartDate)
         .lte("tanggal_transaksi", monthEndDate);
       
-      if (branchFilter && clientIds && clientIds.length > 0) {
-        query = query.in("client_id", clientIds);
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
       }
       
       const { data, error } = await query;
@@ -283,20 +267,14 @@ export default function Dashboard() {
   const { data: currentMonthRevenue } = useQuery({
     queryKey: ["dashboard-current-month-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      const clientIds = await getClientIds();
-      
-      if (branchFilter && clientIds && clientIds.length === 0) {
-        return 0;
-      }
-
       let query = supabase
         .from("highticket_data")
         .select("harga")
         .gte("tanggal_transaksi", monthStartDate)
         .lte("tanggal_transaksi", monthEndDate);
       
-      if (branchFilter && clientIds && clientIds.length > 0) {
-        query = query.in("client_id", clientIds);
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
       }
       
       const { data, error } = await query;
@@ -373,7 +351,7 @@ export default function Dashboard() {
       </div>
 
       {/* Revenue Cards */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -391,7 +369,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Revenue {months[selectedMonth].label} {selectedYear}
+              Revenue {months[selectedMonth].label}
             </CardTitle>
             <div className="p-2 rounded-lg bg-blue-500/10">
               <Calendar className="h-4 w-4 text-blue-500" />
@@ -400,6 +378,34 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">Rp {(currentMonthRevenue || 0).toLocaleString('id-ID')}</div>
             <p className="text-xs text-muted-foreground mt-1">Bulan ini</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Tagihan DP/Angsuran
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-orange-500/10">
+              <CreditCard className="h-4 w-4 text-orange-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Rp {(dpMetrics?.totalHargaBayar || 0).toLocaleString('id-ID')}</div>
+            <p className="text-xs text-muted-foreground mt-1">{dpMetrics?.count || 0} client DP/Angsuran</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Harga Asli (DP/Angsuran)
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-purple-500/10">
+              <Receipt className="h-4 w-4 text-purple-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Rp {(dpMetrics?.totalHarga || 0).toLocaleString('id-ID')}</div>
+            <p className="text-xs text-muted-foreground mt-1">Nilai program asli</p>
           </CardContent>
         </Card>
       </div>
