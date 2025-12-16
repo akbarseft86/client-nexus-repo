@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Upload, Trash2, Check, AlertCircle, Pencil, X } from "lucide-react";
+import { Upload, Trash2, Check, AlertCircle, Pencil, X, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
@@ -160,6 +160,28 @@ interface StagingData {
   };
 }
 
+// Website column definitions
+interface ColumnMapping {
+  key: string;
+  label: string;
+  required: boolean;
+  fileColumn: string;
+}
+
+const WEBSITE_COLUMNS: { key: string; label: string; required: boolean }[] = [
+  { key: 'tanggal_transaksi', label: 'Tanggal Transaksi', required: true },
+  { key: 'nama', label: 'Nama', required: true },
+  { key: 'nohp', label: 'No HP', required: true },
+  { key: 'nama_program', label: 'Nama Program', required: false },
+  { key: 'harga', label: 'Harga', required: true },
+  { key: 'status_payment', label: 'Status Payment', required: true },
+  { key: 'nama_ec', label: 'Nama EC', required: true },
+  { key: 'category', label: 'Category', required: false },
+  { key: 'tanggal_sh2m', label: 'Tanggal SH2M', required: false },
+  { key: 'client_id', label: 'ID Client', required: false },
+  { key: 'keterangan', label: 'Keterangan', required: false },
+];
+
 const EC_NAMES = ["Farah", "Intan", "Rizki", "Sefhia", "Yola"];
 const PAYMENT_STATUS_OPTIONS = ["Lunas", "DP", "Angsuran", "Pelunasan", "Bonus"];
 const CATEGORY_OPTIONS = ["Program", "Merchandise"];
@@ -174,7 +196,14 @@ export default function DataStaging() {
   const [isAssigning, setIsAssigning] = useState(false);
   const [confirmAssign, setConfirmAssign] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Column mapping states
+  const [showColumnMapping, setShowColumnMapping] = useState(false);
+  const [fileHeaders, setFileHeaders] = useState<string[]>([]);
+  const [rawFileData, setRawFileData] = useState<any[]>([]);
+  const [columnMappings, setColumnMappings] = useState<{ [key: string]: string }>({});
 
   const validateRow = (row: Partial<StagingData>): StagingData['validation'] => {
     return {
@@ -201,86 +230,65 @@ export default function DataStaging() {
     if (!file) return;
 
     setIsUploading(true);
-    setUploadProgress(5);
+    setUploadProgress(10);
 
     try {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setUploadProgress(15);
+        setUploadProgress(30);
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-        setUploadProgress(30);
-        const totalRows = jsonData.length;
-        const processedData: StagingData[] = [];
+        if (jsonData.length === 0) {
+          toast.error("File kosong atau tidak valid");
+          setIsUploading(false);
+          setUploadProgress(0);
+          return;
+        }
 
-        jsonData.forEach((row: any, index: number) => {
-          // Parse date
-          const tanggalRaw = row['Tanggal'] || row['tanggal'] || row['Tanggal Transaksi'] || '';
-          const tanggalParsed = parseDateFromFile(tanggalRaw);
-          const tanggalStr = tanggalParsed ? toYMD(tanggalParsed) : '';
+        // Extract headers from first row
+        const headers = Object.keys(jsonData[0] as object);
+        setFileHeaders(headers);
+        setRawFileData(jsonData);
 
-          // Parse SH2M date
-          const sh2mRaw = row['SH2M Leads EC'] || row['Tanggal SH2M'] || row['tanggal_sh2m'] || '';
-          const sh2mParsed = parseDateFromFile(sh2mRaw);
-          const sh2mStr = sh2mParsed ? toYMD(sh2mParsed) : null;
-
-          // Get original and normalized phone
-          const nohpOriginal = String(row['NoHP'] || row['nohp'] || row['No HP'] || row['Phone'] || '');
-          const nohpNormalized = normalizePhoneNumber(nohpOriginal);
-
-          // Parse price
-          const hargaRaw = row['Price'] || row['Harga'] || row['harga'] || 0;
-          const harga = parsePriceFromFile(hargaRaw);
-
-          // Generate client ID
-          const datePart = tanggalParsed 
-            ? `${String(tanggalParsed.getFullYear()).slice(-2)}${String(tanggalParsed.getMonth() + 1).padStart(2, '0')}${String(tanggalParsed.getDate()).padStart(2, '0')}`
-            : 'XXXXXX';
-          const phonePart = nohpNormalized.slice(-4).padStart(4, '0');
-          const sourceInitial = 'X';
-          const clientId = row['Kode Unik'] || row['client_id'] || row['ID Client'] || `${datePart}-${phonePart}-${sourceInitial}`;
-
-          const nama = String(row['Nama'] || row['nama'] || row['Name'] || '').trim();
-          const namaProgram = String(row['Product'] || row['Nama Program'] || row['nama_program'] || '').trim();
-          const statusPayment = String(row['Status Payment'] || row['status_payment'] || 'Lunas').trim();
-          const namaEc = String(row['Closing by'] || row['Nama EC'] || row['nama_ec'] || '').trim();
-          const category = String(row['Category'] || row['category'] || 'Program').trim();
-
-          const stagingRow: StagingData = {
-            id: `staging-${Date.now()}-${index}`,
-            tanggal_transaksi: tanggalStr,
-            client_id: clientId,
-            nama,
-            nohp: nohpNormalized,
-            nohp_original: nohpOriginal,
-            nama_program: namaProgram,
-            harga,
-            harga_bayar: statusPayment === 'DP' ? harga : null,
-            status_payment: statusPayment,
-            nama_ec: namaEc,
-            tanggal_sh2m: sh2mStr,
-            pelaksanaan_program: null,
-            keterangan: String(row['Keterangan'] || row['keterangan'] || '').trim() || null,
-            category: CATEGORY_OPTIONS.includes(category) ? category : 'Program',
-            asal_iklan: '',
-            validation: { nohp_valid: false, nama_valid: false, tanggal_valid: false, harga_valid: false, nama_ec_valid: false, status_payment_valid: false }
-          };
-
-          stagingRow.validation = validateRow(stagingRow);
-          processedData.push(stagingRow);
-
-          setUploadProgress(30 + Math.floor((index / totalRows) * 60));
+        // Auto-detect common mappings
+        const autoMappings: { [key: string]: string } = {};
+        headers.forEach(header => {
+          const headerLower = header.toLowerCase().trim();
+          
+          if (headerLower === 'tanggal' || headerLower === 'tanggal transaksi' || headerLower === 'date') {
+            autoMappings['tanggal_transaksi'] = header;
+          } else if (headerLower === 'nama' || headerLower === 'name' || headerLower === 'nama client') {
+            autoMappings['nama'] = header;
+          } else if (headerLower === 'nohp' || headerLower === 'no hp' || headerLower === 'phone' || headerLower === 'no. hp' || headerLower === 'nomor hp') {
+            autoMappings['nohp'] = header;
+          } else if (headerLower === 'product' || headerLower === 'nama program' || headerLower === 'program') {
+            autoMappings['nama_program'] = header;
+          } else if (headerLower === 'price' || headerLower === 'harga') {
+            autoMappings['harga'] = header;
+          } else if (headerLower === 'status payment' || headerLower === 'status' || headerLower === 'payment status') {
+            autoMappings['status_payment'] = header;
+          } else if (headerLower === 'closing by' || headerLower === 'nama ec' || headerLower === 'ec') {
+            autoMappings['nama_ec'] = header;
+          } else if (headerLower === 'category' || headerLower === 'kategori') {
+            autoMappings['category'] = header;
+          } else if (headerLower === 'sh2m leads ec' || headerLower === 'tanggal sh2m' || headerLower === 'tanggal_sh2m') {
+            autoMappings['tanggal_sh2m'] = header;
+          } else if (headerLower === 'kode unik' || headerLower === 'client_id' || headerLower === 'id client') {
+            autoMappings['client_id'] = header;
+          } else if (headerLower === 'keterangan' || headerLower === 'notes' || headerLower === 'catatan') {
+            autoMappings['keterangan'] = header;
+          }
         });
 
-        setStagingData(processedData);
+        setColumnMappings(autoMappings);
+        setShowColumnMapping(true);
         setUploadProgress(100);
-        toast.success(`${processedData.length} data berhasil dimuat ke staging`);
         setIsUploading(false);
-        setUploadProgress(0);
+        toast.success(`File berhasil dibaca. ${headers.length} kolom ditemukan.`);
       };
       reader.readAsArrayBuffer(file);
     } catch (error) {
@@ -293,6 +301,100 @@ export default function DataStaging() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handleMappingChange = (websiteColumn: string, fileColumn: string) => {
+    setColumnMappings(prev => ({
+      ...prev,
+      [websiteColumn]: fileColumn === '_none_' ? '' : fileColumn
+    }));
+  };
+
+  const processDataWithMapping = () => {
+    if (rawFileData.length === 0) {
+      toast.error("Tidak ada data untuk diproses");
+      return;
+    }
+
+    // Check required columns
+    const requiredColumns = WEBSITE_COLUMNS.filter(col => col.required);
+    const missingRequired = requiredColumns.filter(col => !columnMappings[col.key]);
+    if (missingRequired.length > 0) {
+      toast.error(`Kolom wajib belum dipetakan: ${missingRequired.map(c => c.label).join(', ')}`);
+      return;
+    }
+
+    const processedData: StagingData[] = [];
+
+    rawFileData.forEach((row: any, index: number) => {
+      // Get values based on mapping
+      const tanggalRaw = columnMappings['tanggal_transaksi'] ? row[columnMappings['tanggal_transaksi']] : '';
+      const tanggalParsed = parseDateFromFile(tanggalRaw);
+      const tanggalStr = tanggalParsed ? toYMD(tanggalParsed) : '';
+
+      const sh2mRaw = columnMappings['tanggal_sh2m'] ? row[columnMappings['tanggal_sh2m']] : '';
+      const sh2mParsed = parseDateFromFile(sh2mRaw);
+      const sh2mStr = sh2mParsed ? toYMD(sh2mParsed) : null;
+
+      const nohpOriginal = columnMappings['nohp'] ? String(row[columnMappings['nohp']] || '') : '';
+      const nohpNormalized = normalizePhoneNumber(nohpOriginal);
+
+      const hargaRaw = columnMappings['harga'] ? row[columnMappings['harga']] : 0;
+      const harga = parsePriceFromFile(hargaRaw);
+
+      // Generate client ID
+      const datePart = tanggalParsed 
+        ? `${String(tanggalParsed.getFullYear()).slice(-2)}${String(tanggalParsed.getMonth() + 1).padStart(2, '0')}${String(tanggalParsed.getDate()).padStart(2, '0')}`
+        : 'XXXXXX';
+      const phonePart = nohpNormalized.slice(-4).padStart(4, '0');
+      const sourceInitial = 'X';
+      const clientIdFromFile = columnMappings['client_id'] ? row[columnMappings['client_id']] : '';
+      const clientId = clientIdFromFile || `${datePart}-${phonePart}-${sourceInitial}`;
+
+      const nama = columnMappings['nama'] ? String(row[columnMappings['nama']] || '').trim() : '';
+      const namaProgram = columnMappings['nama_program'] ? String(row[columnMappings['nama_program']] || '').trim() : '';
+      const statusPayment = columnMappings['status_payment'] ? String(row[columnMappings['status_payment']] || 'Lunas').trim() : 'Lunas';
+      const namaEc = columnMappings['nama_ec'] ? String(row[columnMappings['nama_ec']] || '').trim() : '';
+      const category = columnMappings['category'] ? String(row[columnMappings['category']] || 'Program').trim() : 'Program';
+      const keterangan = columnMappings['keterangan'] ? String(row[columnMappings['keterangan']] || '').trim() : '';
+
+      const stagingRow: StagingData = {
+        id: `staging-${Date.now()}-${index}`,
+        tanggal_transaksi: tanggalStr,
+        client_id: clientId,
+        nama,
+        nohp: nohpNormalized,
+        nohp_original: nohpOriginal,
+        nama_program: namaProgram,
+        harga,
+        harga_bayar: statusPayment === 'DP' ? harga : null,
+        status_payment: statusPayment,
+        nama_ec: namaEc,
+        tanggal_sh2m: sh2mStr,
+        pelaksanaan_program: null,
+        keterangan: keterangan || null,
+        category: CATEGORY_OPTIONS.includes(category) ? category : 'Program',
+        asal_iklan: '',
+        validation: { nohp_valid: false, nama_valid: false, tanggal_valid: false, harga_valid: false, nama_ec_valid: false, status_payment_valid: false }
+      };
+
+      stagingRow.validation = validateRow(stagingRow);
+      processedData.push(stagingRow);
+    });
+
+    setStagingData(processedData);
+    setShowColumnMapping(false);
+    setFileHeaders([]);
+    setRawFileData([]);
+    setColumnMappings({});
+    toast.success(`${processedData.length} data berhasil dimuat ke staging`);
+  };
+
+  const cancelColumnMapping = () => {
+    setShowColumnMapping(false);
+    setFileHeaders([]);
+    setRawFileData([]);
+    setColumnMappings({});
   };
 
   const handleEditRow = (row: StagingData) => {
@@ -322,6 +424,12 @@ export default function DataStaging() {
     setStagingData(prev => prev.filter(row => row.id !== id));
     setDeleteConfirmId(null);
     toast.success("Data dihapus dari staging");
+  };
+
+  const handleDeleteAll = () => {
+    setStagingData([]);
+    setConfirmDeleteAll(false);
+    toast.success("Semua data staging dihapus");
   };
 
   const handleAssignToBranch = async () => {
@@ -416,6 +524,77 @@ export default function DataStaging() {
         </CardContent>
       </Card>
 
+      {/* Column Mapping Section */}
+      {showColumnMapping && (
+        <Card className="border-primary">
+          <CardHeader className="bg-primary/5">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ArrowRight className="h-5 w-5" />
+              Pemetaan Kolom
+            </CardTitle>
+            <CardDescription>
+              Petakan kolom website dengan kolom dari file yang diupload. Kolom bertanda (*) wajib dipetakan.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              {/* Header row */}
+              <div className="grid grid-cols-2 gap-4 pb-2 border-b font-medium text-sm">
+                <div className="text-foreground">Kolom Website</div>
+                <div className="text-foreground">Kolom dari File</div>
+              </div>
+              
+              {/* Mapping rows */}
+              {WEBSITE_COLUMNS.map((col) => (
+                <div key={col.key} className="grid grid-cols-2 gap-4 items-center">
+                  <div className="flex items-center gap-2">
+                    <span className={col.required ? "font-medium" : "text-muted-foreground"}>
+                      {col.label}
+                    </span>
+                    {col.required && <span className="text-destructive">*</span>}
+                  </div>
+                  <Select 
+                    value={columnMappings[col.key] || '_none_'} 
+                    onValueChange={(v) => handleMappingChange(col.key, v)}
+                  >
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Pilih kolom..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="_none_">-- Tidak dipetakan --</SelectItem>
+                      {fileHeaders.map(header => (
+                        <SelectItem key={header} value={header}>{header}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+
+              {/* File preview info */}
+              <div className="mt-4 p-3 bg-muted rounded-md">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Info File:</strong> {rawFileData.length} baris data ditemukan dengan {fileHeaders.length} kolom
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Kolom ditemukan: {fileHeaders.join(', ')}
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={cancelColumnMapping}>
+                  Batal
+                </Button>
+                <Button onClick={processDataWithMapping}>
+                  <Check className="h-4 w-4 mr-2" />
+                  Proses Data
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Summary Cards */}
       {stagingData.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -449,10 +628,10 @@ export default function DataStaging() {
             </CardHeader>
             <CardContent className="flex items-center gap-2">
               <Select value={targetBranch} onValueChange={setTargetBranch}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-32 bg-background">
                   <SelectValue placeholder="Pilih" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-popover z-50">
                   <SelectItem value="bekasi">Bekasi</SelectItem>
                   <SelectItem value="jogja">Jogja</SelectItem>
                 </SelectContent>
@@ -474,10 +653,22 @@ export default function DataStaging() {
       {stagingData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Data Staging</CardTitle>
-            <CardDescription>
-              Review dan edit data sebelum di-assign. Baris merah menandakan data tidak valid.
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Data Staging</CardTitle>
+                <CardDescription>
+                  Review dan edit data sebelum di-assign. Baris merah menandakan data tidak valid.
+                </CardDescription>
+              </div>
+              <Button 
+                variant="destructive" 
+                size="sm"
+                onClick={() => setConfirmDeleteAll(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Hapus Semua
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -622,10 +813,10 @@ export default function DataStaging() {
                   value={editData.status_payment} 
                   onValueChange={(v) => setEditData({ ...editData, status_payment: v, harga_bayar: v === 'DP' ? editData.harga : null })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-popover z-50">
                     {PAYMENT_STATUS_OPTIONS.map(opt => (
                       <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                     ))}
@@ -638,10 +829,10 @@ export default function DataStaging() {
                   value={editData.nama_ec} 
                   onValueChange={(v) => setEditData({ ...editData, nama_ec: v })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background">
                     <SelectValue placeholder="Pilih EC" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-popover z-50">
                     {EC_NAMES.map(name => (
                       <SelectItem key={name} value={name}>{name}</SelectItem>
                     ))}
@@ -654,10 +845,10 @@ export default function DataStaging() {
                   value={editData.category} 
                   onValueChange={(v) => setEditData({ ...editData, category: v })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-popover z-50">
                     {CATEGORY_OPTIONS.map(opt => (
                       <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                     ))}
@@ -684,7 +875,7 @@ export default function DataStaging() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* Delete Row Confirmation */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -697,6 +888,24 @@ export default function DataStaging() {
             <AlertDialogCancel>Batal</AlertDialogCancel>
             <AlertDialogAction onClick={() => deleteConfirmId && handleDeleteRow(deleteConfirmId)}>
               Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete All Confirmation */}
+      <AlertDialog open={confirmDeleteAll} onOpenChange={setConfirmDeleteAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Semua Data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Semua {stagingData.length} data di staging area akan dihapus. Aksi ini tidak bisa dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Hapus Semua
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
