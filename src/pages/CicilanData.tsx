@@ -87,29 +87,15 @@ export default function CicilanData() {
   const { data: cicilanData, isLoading } = useQuery({
     queryKey: ["cicilan-data", branchFilter],
     queryFn: async () => {
-      // First get client_ids from sh2m_data filtered by branch
-      let clientQuery = supabase.from("sh2m_data").select("client_id");
-      if (branchFilter) {
-        clientQuery = clientQuery.eq("asal_iklan", branchFilter);
-      }
-      const { data: sh2mClients, error: sh2mError } = await clientQuery;
-      if (sh2mError) throw sh2mError;
-      
-      const clientIds = sh2mClients?.map(c => c.client_id) || [];
-      
-      // If branch filter is active and no clients found, return empty
-      if (branchFilter && clientIds.length === 0) {
-        return [];
-      }
-
       let query = supabase
         .from("highticket_data")
         .select("*")
         .in("status_payment", ["DP", "Angsuran"])
         .order("tanggal_transaksi", { ascending: false });
       
-      if (branchFilter && clientIds.length > 0) {
-        query = query.in("client_id", clientIds);
+      // Filter by asal_iklan directly on highticket_data
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
       }
       
       const { data: highticketData, error: htError } = await query;
