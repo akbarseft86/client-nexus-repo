@@ -44,10 +44,20 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// Indonesian month names mapping
+// Indonesian month names mapping (full and abbreviated)
 const INDONESIAN_MONTHS: { [key: string]: number } = {
-  'januari': 0, 'februari': 1, 'maret': 2, 'april': 3, 'mei': 4, 'juni': 5,
-  'juli': 6, 'agustus': 7, 'september': 8, 'oktober': 9, 'november': 10, 'desember': 11
+  'januari': 0, 'jan': 0,
+  'februari': 1, 'feb': 1, 'peb': 1,
+  'maret': 2, 'mar': 2,
+  'april': 3, 'apr': 3,
+  'mei': 4,
+  'juni': 5, 'jun': 5,
+  'juli': 6, 'jul': 6,
+  'agustus': 7, 'agu': 7, 'agt': 7, 'agst': 7, 'aug': 7,
+  'september': 8, 'sep': 8, 'sept': 8,
+  'oktober': 9, 'okt': 9, 'oct': 9,
+  'november': 10, 'nov': 10, 'nop': 10,
+  'desember': 11, 'des': 11, 'dec': 11
 };
 
 // Normalize phone number to 628xxxxxxxxx format
@@ -78,23 +88,49 @@ const normalizePhoneNumber = (phone: string | null): string => {
 // Parse date from various formats
 const parseDateFromFile = (input: any): Date | null => {
   if (input == null) return null;
+  
+  // Handle Excel serial date (number)
+  if (typeof input === 'number' || (!isNaN(Number(input)) && String(input).match(/^\d+(\.\d+)?$/))) {
+    const serial = Number(input);
+    // Excel serial dates: days since 1900-01-01 (with Excel's leap year bug)
+    if (serial > 25569 && serial < 60000) { // reasonable date range 1970-2064
+      const utc_days = serial - 25569;
+      const utc_value = utc_days * 86400 * 1000;
+      return new Date(utc_value);
+    }
+  }
+  
   const str = String(input).trim();
   if (!str) return null;
 
-  // Try ISO format
+  // Try ISO format: YYYY-MM-DD
   const isoRegex = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
   const isoMatch = str.match(isoRegex);
   if (isoMatch) {
     return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
   }
 
-  // Try Indonesian text format: "1 Juni 2025"
-  const indoTextRegex = /^(\d{1,2})\s+(\w+)\s+(\d{4})$/i;
+  // Try Indonesian text format: "24 Agustus 2024" or "1 Juni 2025"
+  const indoTextRegex = /^(\d{1,2})\s+([a-zA-Z]+)\s+(\d{4})$/i;
   const indoTextMatch = str.match(indoTextRegex);
   if (indoTextMatch) {
     const day = parseInt(indoTextMatch[1], 10);
     const monthName = indoTextMatch[2].toLowerCase();
     const year = parseInt(indoTextMatch[3], 10);
+    const month = INDONESIAN_MONTHS[monthName];
+    if (month !== undefined) {
+      return new Date(year, month, day);
+    }
+  }
+
+  // Try format with abbreviated month: "24-Agt-2024" or "24/Agt/2024"
+  const abbrevMonthRegex = /^(\d{1,2})[\s\-\/]+([a-zA-Z]+)[\s\-\/]+(\d{2,4})$/i;
+  const abbrevMatch = str.match(abbrevMonthRegex);
+  if (abbrevMatch) {
+    const day = parseInt(abbrevMatch[1], 10);
+    const monthName = abbrevMatch[2].toLowerCase();
+    let year = parseInt(abbrevMatch[3], 10);
+    if (year < 100) year += 2000;
     const month = INDONESIAN_MONTHS[monthName];
     if (month !== undefined) {
       return new Date(year, month, day);
@@ -108,6 +144,20 @@ const parseDateFromFile = (input: any): Date | null => {
     let year = parseInt(indoMatch[3], 10);
     if (year < 100) year += 2000;
     return new Date(year, parseInt(indoMatch[2]) - 1, parseInt(indoMatch[1]));
+  }
+
+  // Try US format: MM/DD/YYYY
+  const usRegex = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/;
+  const usMatch = str.match(usRegex);
+  if (usMatch) {
+    const month = parseInt(usMatch[1], 10);
+    const day = parseInt(usMatch[2], 10);
+    const year = parseInt(usMatch[3], 10);
+    // Prefer DD/MM/YYYY interpretation for Indonesian context
+    if (day <= 12 && month <= 31) {
+      return new Date(year, day - 1, month);
+    }
+    return new Date(year, month - 1, day);
   }
 
   // Try parsing as Date
