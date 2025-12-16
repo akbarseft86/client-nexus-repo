@@ -121,16 +121,39 @@ export default function Dashboard() {
   
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-  // Get Total Revenue (All Time for this branch) - fetch all records with pagination
+  // Get Total Revenue (All Time for this branch) - only Lunas + Pelunasan (actual paid revenue)
   const { data: totalRevenue } = useQuery({
     queryKey: ["dashboard-total-revenue", branchFilter],
     queryFn: async () => {
-      const data = await fetchAllPaginated<{ harga: number }>(
-        () => supabase.from("highticket_data"),
-        "harga",
-        { branchFilter }
-      );
-      return data.reduce((sum, d) => sum + (d.harga || 0), 0);
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("highticket_data")
+          .select("harga, status_payment")
+          .in("status_payment", ["Lunas", "Pelunasan"])
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      return allData.reduce((sum, d) => sum + (d.harga || 0), 0);
     },
   });
 
@@ -288,20 +311,41 @@ export default function Dashboard() {
     },
   });
 
-  // Get monthly revenue for selected month - with pagination
+  // Get monthly revenue for selected month - only Lunas + Pelunasan
   const { data: currentMonthRevenue } = useQuery({
     queryKey: ["dashboard-current-month-revenue", branchFilter, monthStartDate, monthEndDate],
     queryFn: async () => {
-      const data = await fetchAllPaginated<{ harga: number }>(
-        () => supabase.from("highticket_data"),
-        "harga",
-        { 
-          branchFilter, 
-          dateRange: { start: monthStartDate, end: monthEndDate }
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("highticket_data")
+          .select("harga")
+          .in("status_payment", ["Lunas", "Pelunasan"])
+          .gte("tanggal_transaksi", monthStartDate)
+          .lte("tanggal_transaksi", monthEndDate)
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
         }
-      );
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
       
-      return data.reduce((sum, d) => sum + (d.harga || 0), 0);
+      return allData.reduce((sum, d) => sum + (d.harga || 0), 0);
     },
   });
 
@@ -384,7 +428,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">Rp {(totalRevenue || 0).toLocaleString('id-ID')}</div>
-            <p className="text-xs text-muted-foreground mt-1">Semua transaksi {selectedBranch}</p>
+            <p className="text-xs text-muted-foreground mt-1">Lunas + Pelunasan</p>
           </CardContent>
         </Card>
         <Card>
