@@ -221,6 +221,52 @@ export default function CEODashboard() {
       ? ((mtdTransactionCount - prevTransactionCount) / prevTransactionCount) * 100 
       : mtdTransactionCount > 0 ? 100 : 0;
 
+    // ===== YoY GROWTH CALCULATION =====
+    // Same month last year
+    const lastYearStart = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+    const lastYearEnd = new Date(today.getFullYear() - 1, today.getMonth() + 1, 0);
+    const lastYearTransactions = highticketData.filter(d => {
+      const date = new Date(d.tanggal_transaksi);
+      return date >= lastYearStart && date <= lastYearEnd && 
+        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+    });
+    const lastYearRevenue = lastYearTransactions.reduce((sum, d) => sum + Number(d.harga || 0), 0);
+
+    // Calculate YoY Growth Rate
+    const yoyGrowthRate = lastYearRevenue > 0 
+      ? ((mtdRevenue - lastYearRevenue) / lastYearRevenue) * 100 
+      : mtdRevenue > 0 ? 100 : 0;
+
+    // YoY Growth per Branch
+    const lastYearBekasi = lastYearTransactions.filter(d => d.asal_iklan?.includes("Bekasi")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const lastYearJogja = lastYearTransactions.filter(d => d.asal_iklan?.includes("Jogja")).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    
+    const yoyGrowthBekasi = lastYearBekasi > 0 ? ((mtdBekasi - lastYearBekasi) / lastYearBekasi) * 100 : mtdBekasi > 0 ? 100 : 0;
+    const yoyGrowthJogja = lastYearJogja > 0 ? ((mtdJogja - lastYearJogja) / lastYearJogja) * 100 : mtdJogja > 0 ? 100 : 0;
+
+    // YoY Transaction count
+    const lastYearTransactionCount = lastYearTransactions.length;
+    const yoyGrowthTransactions = lastYearTransactionCount > 0 
+      ? ((mtdTransactionCount - lastYearTransactionCount) / lastYearTransactionCount) * 100 
+      : mtdTransactionCount > 0 ? 100 : 0;
+
+    // Full year comparison
+    const currentYearRevenue = highticketData.filter(d => {
+      const date = new Date(d.tanggal_transaksi);
+      return date.getFullYear() === today.getFullYear() && 
+        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+    }).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+
+    const previousYearRevenue = highticketData.filter(d => {
+      const date = new Date(d.tanggal_transaksi);
+      return date.getFullYear() === today.getFullYear() - 1 && 
+        (d.status_payment === "Lunas" || d.status_payment === "Pelunasan");
+    }).reduce((sum, d) => sum + Number(d.harga || 0), 0);
+
+    const yoyFullYearGrowth = previousYearRevenue > 0 
+      ? ((currentYearRevenue - previousYearRevenue) / previousYearRevenue) * 100 
+      : currentYearRevenue > 0 ? 100 : 0;
+
     // Outstanding (DP + Angsuran - payments made)
     const outstandingTransactions = filteredHighticket.filter(
       d => d.status_payment === "DP" || d.status_payment === "Angsuran"
@@ -528,6 +574,15 @@ export default function CEODashboard() {
       momGrowthJogja,
       momGrowthTransactions,
       prevMonthRevenue,
+      // YoY Growth
+      yoyGrowthRate,
+      yoyGrowthBekasi,
+      yoyGrowthJogja,
+      yoyGrowthTransactions,
+      lastYearRevenue,
+      currentYearRevenue,
+      previousYearRevenue,
+      yoyFullYearGrowth,
       // Payment Status
       paymentStatusData,
       totalHighticket: filteredHighticket.length,
@@ -803,6 +858,54 @@ export default function CEODashboard() {
               <p className="text-sm text-muted-foreground mb-2">Transaksi</p>
               {metrics && getGrowthIndicator(metrics.momGrowthTransactions, "lg")}
               <p className="text-xs text-muted-foreground mt-2">Jumlah transaksi paid</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* YoY Growth Summary Card */}
+      <Card className="border-2 border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <BarChart3 className="h-5 w-5 text-amber-500" />
+            YoY Growth Summary
+          </CardTitle>
+          <CardDescription>
+            Perbandingan bulan ini ({monthNames[today.getMonth()]}) vs tahun lalu ({today.getFullYear() - 1})
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Overall YoY Growth */}
+            <div className="p-4 rounded-lg bg-background border">
+              <p className="text-sm text-muted-foreground mb-2">Revenue YoY</p>
+              {metrics && getGrowthIndicator(metrics.yoyGrowthRate, "lg")}
+              <p className="text-xs text-muted-foreground mt-2">
+                {formatCurrency(metrics?.lastYearRevenue || 0)} → {formatCurrency(metrics?.mtdRevenue || 0)}
+              </p>
+            </div>
+            
+            {/* Bekasi YoY */}
+            <div className="p-4 rounded-lg bg-background border">
+              <p className="text-sm text-muted-foreground mb-2">Bekasi YoY</p>
+              {metrics && getGrowthIndicator(metrics.yoyGrowthBekasi, "lg")}
+              <Badge variant="outline" className="mt-2 text-blue-600 border-blue-300">Bekasi</Badge>
+            </div>
+            
+            {/* Jogja YoY */}
+            <div className="p-4 rounded-lg bg-background border">
+              <p className="text-sm text-muted-foreground mb-2">Jogja YoY</p>
+              {metrics && getGrowthIndicator(metrics.yoyGrowthJogja, "lg")}
+              <Badge variant="outline" className="mt-2 text-green-600 border-green-300">Jogja</Badge>
+            </div>
+            
+            {/* Full Year YoY */}
+            <div className="p-4 rounded-lg bg-background border">
+              <p className="text-sm text-muted-foreground mb-2">Full Year</p>
+              {metrics && getGrowthIndicator(metrics.yoyFullYearGrowth, "lg")}
+              <p className="text-xs text-muted-foreground mt-2">
+                {today.getFullYear() - 1} → {today.getFullYear()}
+              </p>
             </div>
           </div>
         </CardContent>
