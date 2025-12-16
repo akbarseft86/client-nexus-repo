@@ -456,12 +456,33 @@ export default function HighticketData() {
     setUploadProgress(0);
     try {
       setUploadProgress(5);
-      const data = await selectedFile.arrayBuffer();
-      setUploadProgress(10);
-      const workbook = XLSX.read(data, { type: 'array', FS: ';' });
+
+      // CSV must be read as text (comma-separated). Using FS:';' causes the entire row to be one cell.
+      let workbook: any;
+      const lowerName = selectedFile.name.toLowerCase();
+      if (lowerName.endsWith('.csv')) {
+        const text = await selectedFile.text();
+        setUploadProgress(10);
+        workbook = XLSX.read(text, { type: 'string' });
+      } else {
+        const data = await selectedFile.arrayBuffer();
+        setUploadProgress(10);
+        workbook = XLSX.read(data, { type: 'array' });
+      }
+
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
       setUploadProgress(15);
+
+
+      if (import.meta.env.DEV) {
+        const firstRow = (jsonData as any[])[0] ?? {};
+        console.log("Highticket upload columns:", Object.keys(firstRow));
+        console.log(
+          "Highticket upload sample tanggal:",
+          firstRow.Tanggal ?? firstRow.tanggal ?? firstRow["Tanggal Transaksi"] ?? firstRow["Tanggal"]
+        );
+      }
 
       // Fetch SH2M data for client ID lookup by phone
       const { data: sh2mData } = await supabase
