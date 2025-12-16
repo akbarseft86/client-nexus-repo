@@ -13,6 +13,7 @@ import SearchClient from "@/pages/SearchClient";
 import SourceIklanCategories from "@/pages/SourceIklanCategories";
 import LeadsEC from "@/pages/LeadsEC";
 import DataDuplikat from "@/pages/DataDuplikat";
+import DataTrust from "@/pages/DataTrust";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
                 <Route path="/source-categories" element={<SourceIklanCategories />} />
                 <Route path="/leads-ec" element={<LeadsEC />} />
                 <Route path="/data-duplikat" element={<DataDuplikat />} />
+                <Route path="/data-trust" element={<DataTrust />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
