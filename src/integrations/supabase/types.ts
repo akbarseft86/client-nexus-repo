@@ -49,6 +49,7 @@ export type Database = {
           client_id: string
           created_at: string
           harga: number
+          harga_bayar: number | null
           id: string
           keterangan: string | null
           nama: string
@@ -68,6 +69,7 @@ export type Database = {
           client_id: string
           created_at?: string
           harga: number
+          harga_bayar?: number | null
           id?: string
           keterangan?: string | null
           nama: string
@@ -87,6 +89,7 @@ export type Database = {
           client_id?: string
           created_at?: string
           harga?: number
+          harga_bayar?: number | null
           id?: string
           keterangan?: string | null
           nama?: string

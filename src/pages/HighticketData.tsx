@@ -257,6 +257,7 @@ export default function HighticketData() {
 
   const addMutation = useMutation({
     mutationFn: async ({ formData, imageFile }: { formData: FormData; imageFile: File | null }) => {
+      const hargaBayarValue = formData.get("harga_bayar") as string;
       const newData: any = {
         tanggal_transaksi: formData.get("tanggal_transaksi") as string,
         client_id: formData.get("client_id") as string,
@@ -265,6 +266,7 @@ export default function HighticketData() {
         category: formData.get("category") as string,
         nama_program: formData.get("nama_program") as string,
         harga: parseFloat(formData.get("harga") as string),
+        harga_bayar: hargaBayarValue ? parseFloat(hargaBayarValue) : null,
         status_payment: formData.get("status_payment") as string,
         nama_ec: formData.get("nama_ec") as string,
         tanggal_sh2m: formData.get("tanggal_sh2m") as string || null,
@@ -323,6 +325,7 @@ export default function HighticketData() {
 
   const editMutation = useMutation({
     mutationFn: async (data: { id: string; formData: FormData; imageFile?: File | null }) => {
+      const hargaBayarValue = data.formData.get("harga_bayar") as string;
       const updateData: any = {
         tanggal_transaksi: data.formData.get("tanggal_transaksi") as string,
         client_id: data.formData.get("client_id") as string,
@@ -331,6 +334,7 @@ export default function HighticketData() {
         category: data.formData.get("category") as string,
         nama_program: data.formData.get("nama_program") as string,
         harga: parseFloat(data.formData.get("harga") as string),
+        harga_bayar: hargaBayarValue ? parseFloat(hargaBayarValue) : null,
         status_payment: data.formData.get("status_payment") as string,
         nama_ec: data.formData.get("nama_ec") as string,
         tanggal_sh2m: data.formData.get("tanggal_sh2m") as string || null,
@@ -403,6 +407,7 @@ export default function HighticketData() {
       "Category": row.category,
       "Nama Program": row.nama_program,
       "Harga": row.harga,
+      "Harga Bayar": row.harga_bayar || '-',
       "Status Payment": row.status_payment,
       "Nama EC": row.nama_ec,
       "Tanggal SH2M": row.tanggal_sh2m ? new Date(row.tanggal_sh2m).toLocaleDateString('id-ID') : '-',
@@ -560,6 +565,9 @@ export default function HighticketData() {
           continue;
         }
 
+        // Parse harga_bayar
+        const hargaBayar = parsePriceFromFile(row.harga_bayar || row['Harga Bayar']);
+
         processedData.push({
           tanggal_transaksi: toYMD(tanggalTransaksi),
           client_id: clientId || `AUTO-${i + 1}`,
@@ -568,6 +576,7 @@ export default function HighticketData() {
           category: category,
           nama_program: namaProgram,
           harga: harga,
+          harga_bayar: hargaBayar || null,
           status_payment: statusPayment,
           nama_ec: namaEc,
           tanggal_sh2m: tanggalSh2m ? toYMD(tanggalSh2m) : null,
@@ -780,6 +789,10 @@ export default function HighticketData() {
                     <Input id="harga" name="harga" type="number" required />
                   </div>
                   <div>
+                    <Label htmlFor="harga_bayar">Harga Bayar (jika DP)</Label>
+                    <Input id="harga_bayar" name="harga_bayar" type="number" placeholder="Kosongkan jika Lunas" />
+                  </div>
+                  <div>
                     <Label htmlFor="status_payment">Status Payment</Label>
                     <Select name="status_payment" defaultValue="Lunas" required>
                       <SelectTrigger>
@@ -963,6 +976,7 @@ export default function HighticketData() {
               <TableHead>Category</TableHead>
               <TableHead>Nama Program</TableHead>
               <TableHead>Harga</TableHead>
+              <TableHead>Harga Bayar</TableHead>
               <TableHead>Status Payment</TableHead>
               <TableHead>Nama EC</TableHead>
               <TableHead>Tanggal SH2M</TableHead>
@@ -975,11 +989,11 @@ export default function HighticketData() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={15} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={16} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : filteredData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={15} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={16} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               filteredData?.map((row) => (
@@ -1000,8 +1014,11 @@ export default function HighticketData() {
                   <TableCell>{row.nama_program}</TableCell>
                   <TableCell>Rp {row.harga.toLocaleString('id-ID')}</TableCell>
                   <TableCell>
+                    {row.harga_bayar ? `Rp ${row.harga_bayar.toLocaleString('id-ID')}` : '-'}
+                  </TableCell>
+                  <TableCell>
                     <span className={`px-2 py-1 rounded text-xs ${
-                      row.status_payment === 'Lunas' 
+                      row.status_payment === 'Lunas'
                         ? 'bg-success/10 text-success' 
                         : row.status_payment === 'DP' || row.status_payment === 'Angsuran'
                         ? 'bg-warning/10 text-warning'
@@ -1140,6 +1157,16 @@ export default function HighticketData() {
                     type="number" 
                     defaultValue={editingData.harga}
                     required 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_harga_bayar">Harga Bayar (jika DP)</Label>
+                  <Input 
+                    id="edit_harga_bayar" 
+                    name="harga_bayar" 
+                    type="number" 
+                    defaultValue={editingData.harga_bayar || ''}
+                    placeholder="Kosongkan jika Lunas"
                   />
                 </div>
                 <div>
