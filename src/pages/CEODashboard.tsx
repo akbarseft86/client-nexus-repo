@@ -8,10 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   BarChart3, TrendingUp, Users, AlertTriangle, Shield, Crown, 
   Repeat, Building2, Target, Clock, CheckCircle, XCircle, AlertCircle,
-  DollarSign, Percent, UserCheck, CreditCard, Wallet, Receipt
+  DollarSign, Percent, UserCheck, CreditCard, Wallet, Receipt, Package
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, differenceInDays, subDays, subMonths } from "date-fns";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
 // Normalize phone number
 function normalizePhoneNumber(phone: string | null | undefined): string {
@@ -269,6 +269,44 @@ export default function CEODashboard() {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
+    // ===== PRODUCT PERFORMANCE BY CATEGORY =====
+    const productStats: Record<string, { 
+      transactions: number; 
+      revenue: number; 
+      category: string;
+    }> = {};
+
+    filteredHighticket.forEach(d => {
+      const product = d.nama_program || "Unknown";
+      const category = d.category || "Program";
+      if (!productStats[product]) {
+        productStats[product] = { transactions: 0, revenue: 0, category };
+      }
+      productStats[product].transactions++;
+      if (d.status_payment === "Lunas" || d.status_payment === "Pelunasan") {
+        productStats[product].revenue += Number(d.harga || 0);
+      }
+    });
+
+    const allProductPerformance = Object.entries(productStats)
+      .map(([product, data]) => ({
+        product,
+        ...data,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    // Top products combined
+    const topProductsAll = allProductPerformance.slice(0, 10);
+
+    // Top products by category
+    const topProductsProgram = allProductPerformance
+      .filter(p => p.category === "Program")
+      .slice(0, 10);
+
+    const topProductsMerchandise = allProductPerformance
+      .filter(p => p.category === "Merchandise")
+      .slice(0, 10);
+
     // ===== TOP OUTSTANDING CLIENTS =====
     const outstandingByClient = outstandingTransactions.map(ht => {
       const targetAmount = ht.harga_bayar ? Number(ht.harga_bayar) : Number(ht.harga);
@@ -446,6 +484,10 @@ export default function CEODashboard() {
       unpaidOver7Days,
       // Source Performance
       sourcePerformance,
+      // Product Performance
+      topProductsAll,
+      topProductsProgram,
+      topProductsMerchandise,
       // Alerts
       alerts,
     };
@@ -790,7 +832,133 @@ export default function CEODashboard() {
         </Card>
       </div>
 
-      {/* E. Source Iklan Performance */}
+      {/* E. Top Product Performance */}
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* All Products */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Package className="h-5 w-5 text-primary" />
+              Top Product (Semua)
+            </CardTitle>
+            <CardDescription>Gabungan Program & Merchandise</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={metrics?.topProductsAll || []} 
+                  layout="vertical"
+                  margin={{ left: 10, right: 10 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                  <XAxis type="number" tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                  <YAxis 
+                    type="category" 
+                    dataKey="product" 
+                    width={100} 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => formatCurrency(value)}
+                    labelFormatter={(label) => `Product: ${label}`}
+                  />
+                  <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Program Products */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Package className="h-5 w-5 text-blue-500" />
+              Top Product (Program)
+            </CardTitle>
+            <CardDescription>Kategori Program saja</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {metrics?.topProductsProgram.length === 0 ? (
+              <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                Tidak ada data Program
+              </div>
+            ) : (
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={metrics?.topProductsProgram || []} 
+                    layout="vertical"
+                    margin={{ left: 10, right: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis type="number" tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                    <YAxis 
+                      type="category" 
+                      dataKey="product" 
+                      width={100} 
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => formatCurrency(value)}
+                      labelFormatter={(label) => `Product: ${label}`}
+                    />
+                    <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Merchandise Products */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Package className="h-5 w-5 text-amber-500" />
+              Top Product (Merchandise)
+            </CardTitle>
+            <CardDescription>Kategori Merchandise saja</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {metrics?.topProductsMerchandise.length === 0 ? (
+              <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                Tidak ada data Merchandise
+              </div>
+            ) : (
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={metrics?.topProductsMerchandise || []} 
+                    layout="vertical"
+                    margin={{ left: 10, right: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis type="number" tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                    <YAxis 
+                      type="category" 
+                      dataKey="product" 
+                      width={100} 
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => v.length > 15 ? v.substring(0, 15) + '...' : v}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => formatCurrency(value)}
+                      labelFormatter={(label) => `Product: ${label}`}
+                    />
+                    <Bar dataKey="revenue" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* F. Source Iklan Performance */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
