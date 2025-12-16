@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Trash2, Download, Filter, Pencil, Upload, Image, X, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -142,6 +143,9 @@ export default function HighticketData() {
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
@@ -328,6 +332,51 @@ export default function HighticketData() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from("highticket_data")
+        .delete()
+        .in("id", ids);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["highticket-data"] });
+      toast.success(`${selectedIds.length} data berhasil dihapus`);
+      setSelectedIds([]);
+      setConfirmBulkDelete(false);
+    },
+    onError: () => {
+      toast.error("Gagal menghapus data");
+      setConfirmBulkDelete(false);
+    },
+  });
+
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      const idsToDelete = filteredData?.map(row => row.id) || [];
+      if (idsToDelete.length === 0) return;
+      
+      const { error } = await supabase
+        .from("highticket_data")
+        .delete()
+        .in("id", idsToDelete);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["highticket-data"] });
+      toast.success("Semua data berhasil dihapus");
+      setSelectedIds([]);
+      setConfirmDeleteAll(false);
+    },
+    onError: () => {
+      toast.error("Gagal menghapus data");
+      setConfirmDeleteAll(false);
+    },
+  });
+
   const editMutation = useMutation({
     mutationFn: async (data: { id: string; formData: FormData; imageFile?: File | null }) => {
       const hargaBayarValue = data.formData.get("harga_bayar") as string;
@@ -398,6 +447,24 @@ export default function HighticketData() {
     
     return true;
   });
+
+  // Selection handlers
+  const toggleSelectAll = () => {
+    if (!filteredData) return;
+    if (selectedIds.length === filteredData.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredData.map(row => row.id));
+    }
+  };
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) 
+        ? prev.filter(i => i !== id) 
+        : [...prev, id]
+    );
+  };
 
   const handleExportExcel = () => {
     if (!filteredData || filteredData.length === 0) {
@@ -983,10 +1050,44 @@ export default function HighticketData() {
         </CollapsibleContent>
       </Collapsible>
 
+      {/* Bulk Actions */}
+      {!isPreviewMode && (
+        <div className="flex items-center gap-2 mb-4">
+          {selectedIds.length > 0 && (
+            <Button 
+              variant="destructive" 
+              size="sm"
+              onClick={() => setConfirmBulkDelete(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Hapus Terpilih ({selectedIds.length})
+            </Button>
+          )}
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+            onClick={() => setConfirmDeleteAll(true)}
+            disabled={!filteredData || filteredData.length === 0}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Hapus Semua ({filteredData?.length || 0})
+          </Button>
+        </div>
+      )}
+
       <Card>
         <Table>
           <TableHeader>
             <TableRow>
+              {!isPreviewMode && (
+                <TableHead className="w-[50px]">
+                  <Checkbox
+                    checked={filteredData && filteredData.length > 0 && selectedIds.length === filteredData.length}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </TableHead>
+              )}
               <TableHead>Tanggal Transaksi</TableHead>
               <TableHead>Client ID</TableHead>
               <TableHead>Nama</TableHead>
@@ -1007,15 +1108,23 @@ export default function HighticketData() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={16} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={isPreviewMode ? 15 : 16} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : filteredData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={16} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={isPreviewMode ? 15 : 16} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               filteredData?.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className={selectedIds.includes(row.id) ? "bg-muted/50" : ""}>
+                  {!isPreviewMode && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.includes(row.id)}
+                        onCheckedChange={() => toggleSelectRow(row.id)}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>{new Date(row.tanggal_transaksi).toLocaleDateString('id-ID')}</TableCell>
                   <TableCell className="font-medium">{row.client_id}</TableCell>
                   <TableCell>{row.nama}</TableCell>
@@ -1292,6 +1401,48 @@ export default function HighticketData() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi Hapus Data Terpilih</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus {selectedIds.length} data yang dipilih? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => bulkDeleteMutation.mutate(selectedIds)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleteMutation.isPending ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete All Confirmation Dialog */}
+      <AlertDialog open={confirmDeleteAll} onOpenChange={setConfirmDeleteAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi Hapus Semua Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus semua {filteredData?.length || 0} data yang ditampilkan? Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteAllMutation.mutate()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteAllMutation.isPending ? "Menghapus..." : "Hapus Semua"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
