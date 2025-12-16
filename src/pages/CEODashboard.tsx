@@ -191,7 +191,7 @@ export default function CEODashboard() {
 
     // ===== REVENUE METRICS FROM HIGHTICKET =====
     // Total Revenue (ALL transactions)
-    const totalRevenue = filteredHighticket.reduce((sum, d) => sum + Number(d.harga || 0), 0);
+    const totalRevenue = highticketData.reduce((sum, d) => sum + Number(d.harga || 0), 0);
 
     // MTD Revenue (ALL transactions)
     const mtdStart = startOfMonth(today);
