@@ -55,12 +55,14 @@ interface HighticketWithPayments {
   nohp: string;
   nama_program: string;
   harga: number;
+  harga_bayar: number | null;
   status_payment: string;
   nama_ec: string;
   tanggal_transaksi: string;
   keterangan: string | null;
   payments: PaymentHistory[];
   totalPaid: number;
+  targetAmount: number; // harga_bayar jika ada, atau harga jika tidak
   remaining: number;
   progress: number;
 }
@@ -120,13 +122,16 @@ export default function CicilanData() {
       const combinedData: HighticketWithPayments[] = (highticketData || []).map((ht) => {
         const payments = paymentsData.filter((p) => p.highticket_id === ht.id);
         const totalPaid = payments.reduce((sum, p) => sum + Number(p.jumlah_bayar), 0);
-        const remaining = Number(ht.harga) - totalPaid;
-        const progress = (totalPaid / Number(ht.harga)) * 100;
+        // Use harga_bayar as target if available, otherwise use harga
+        const targetAmount = ht.harga_bayar ? Number(ht.harga_bayar) : Number(ht.harga);
+        const remaining = targetAmount - totalPaid;
+        const progress = (totalPaid / targetAmount) * 100;
 
         return {
           ...ht,
           payments,
           totalPaid,
+          targetAmount,
           remaining: remaining > 0 ? remaining : 0,
           progress: progress > 100 ? 100 : progress,
         };
@@ -266,21 +271,27 @@ export default function CicilanData() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-card border rounded-lg p-4">
           <p className="text-sm text-muted-foreground">Total Client Cicilan</p>
           <p className="text-2xl font-bold text-foreground">{filteredData?.length || 0}</p>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">Total Tagihan</p>
+          <p className="text-sm text-muted-foreground">Total Tagihan (Harga Bayar)</p>
           <p className="text-2xl font-bold text-foreground">
-            {formatCurrency(filteredData?.reduce((sum, item) => sum + Number(item.harga), 0) || 0)}
+            {formatCurrency(filteredData?.reduce((sum, item) => sum + item.targetAmount, 0) || 0)}
           </p>
         </div>
         <div className="bg-card border rounded-lg p-4">
           <p className="text-sm text-muted-foreground">Total Terbayar</p>
           <p className="text-2xl font-bold text-green-600">
             {formatCurrency(filteredData?.reduce((sum, item) => sum + item.totalPaid, 0) || 0)}
+          </p>
+        </div>
+        <div className="bg-card border rounded-lg p-4">
+          <p className="text-sm text-muted-foreground">Sisa Tagihan</p>
+          <p className="text-2xl font-bold text-orange-600">
+            {formatCurrency(filteredData?.reduce((sum, item) => sum + item.remaining, 0) || 0)}
           </p>
         </div>
       </div>
@@ -296,7 +307,7 @@ export default function CicilanData() {
               <TableHead>Nama</TableHead>
               <TableHead>No HP</TableHead>
               <TableHead>Program</TableHead>
-              <TableHead>Total Harga</TableHead>
+              <TableHead>Harga Bayar</TableHead>
               <TableHead>Terbayar</TableHead>
               <TableHead>Sisa</TableHead>
               <TableHead>Progress</TableHead>
@@ -329,7 +340,7 @@ export default function CicilanData() {
                     <TableCell>{item.nama}</TableCell>
                     <TableCell>{item.nohp}</TableCell>
                     <TableCell>{item.nama_program}</TableCell>
-                    <TableCell>{formatCurrency(Number(item.harga))}</TableCell>
+                    <TableCell>{formatCurrency(item.targetAmount)}</TableCell>
                     <TableCell className="text-green-600 font-medium">
                       {formatCurrency(item.totalPaid)}
                     </TableCell>
@@ -374,6 +385,7 @@ export default function CicilanData() {
                             <div className="bg-muted p-3 rounded-lg">
                               <p className="text-sm"><strong>Client:</strong> {item.nama}</p>
                               <p className="text-sm"><strong>Program:</strong> {item.nama_program}</p>
+                              <p className="text-sm"><strong>Harga Bayar:</strong> {formatCurrency(item.targetAmount)}</p>
                               <p className="text-sm"><strong>Sisa Tagihan:</strong> {formatCurrency(item.remaining)}</p>
                             </div>
                             <div className="space-y-2">
