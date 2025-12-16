@@ -10,7 +10,7 @@ import {
   Repeat, Building2, Target, Clock, CheckCircle, XCircle, AlertCircle,
   DollarSign, Percent, UserCheck, CreditCard, Wallet, Receipt
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, differenceInDays } from "date-fns";
+import { format, startOfMonth, endOfMonth, differenceInDays, subDays, subMonths } from "date-fns";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 // Normalize phone number
@@ -60,15 +60,33 @@ const monthNames = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember"
 ];
 
+type PeriodFilter = "full_month" | "last_week" | "last_month" | "all";
+
 export default function CEODashboard() {
   const today = new Date();
   const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("full_month");
 
   const getDateRange = () => {
-    const start = new Date(selectedYear, selectedMonth, 1);
-    const end = new Date(selectedYear, selectedMonth + 1, 0); // Last day of month
-    return { start, end };
+    // Base date is the last day of selected month/year
+    const selectedDate = new Date(selectedYear, selectedMonth + 1, 0); // Last day of selected month
+    const monthStart = new Date(selectedYear, selectedMonth, 1);
+    const monthEnd = new Date(selectedYear, selectedMonth + 1, 0);
+
+    switch (periodFilter) {
+      case "all":
+        return { start: null, end: null };
+      case "last_week":
+        // Last 7 days from end of selected month
+        return { start: subDays(monthEnd, 6), end: monthEnd };
+      case "last_month":
+        // Full selected month (same as full_month but labeled differently)
+        return { start: monthStart, end: monthEnd };
+      case "full_month":
+      default:
+        return { start: monthStart, end: monthEnd };
+    }
   };
 
   // Fetch all SH2M data
@@ -127,22 +145,24 @@ export default function CEODashboard() {
   const filteredSh2m = useMemo(() => {
     if (!sh2mData) return [];
     const range = getDateRange();
+    if (!range.start || !range.end) return sh2mData; // Return all if "all" selected
     
     return sh2mData.filter(d => {
       const recordDate = new Date(d.tanggal);
-      return recordDate >= range.start && recordDate <= range.end;
+      return recordDate >= range.start! && recordDate <= range.end!;
     });
-  }, [sh2mData, selectedMonth, selectedYear]);
+  }, [sh2mData, selectedMonth, selectedYear, periodFilter]);
 
   const filteredHighticket = useMemo(() => {
     if (!highticketData) return [];
     const range = getDateRange();
+    if (!range.start || !range.end) return highticketData; // Return all if "all" selected
     
     return highticketData.filter(d => {
       const recordDate = new Date(d.tanggal_transaksi);
-      return recordDate >= range.start && recordDate <= range.end;
+      return recordDate >= range.start! && recordDate <= range.end!;
     });
-  }, [highticketData, selectedMonth, selectedYear]);
+  }, [highticketData, selectedMonth, selectedYear, periodFilter]);
 
   // Calculate all metrics
   const metrics = useMemo(() => {
@@ -456,8 +476,23 @@ export default function CEODashboard() {
             <p className="text-muted-foreground">Executive Dashboard - Semua Cabang</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={periodFilter} onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Periode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="full_month">Bulan Penuh</SelectItem>
+              <SelectItem value="last_week">1 Minggu Terakhir</SelectItem>
+              <SelectItem value="last_month">1 Bulan Terakhir</SelectItem>
+              <SelectItem value="all">Semua Data</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select 
+            value={selectedMonth.toString()} 
+            onValueChange={(v) => setSelectedMonth(parseInt(v))}
+            disabled={periodFilter === "all"}
+          >
             <SelectTrigger className="w-36">
               <SelectValue placeholder="Pilih Bulan" />
             </SelectTrigger>
@@ -467,7 +502,11 @@ export default function CEODashboard() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+          <Select 
+            value={selectedYear.toString()} 
+            onValueChange={(v) => setSelectedYear(parseInt(v))}
+            disabled={periodFilter === "all"}
+          >
             <SelectTrigger className="w-24">
               <SelectValue placeholder="Tahun" />
             </SelectTrigger>
