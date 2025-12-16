@@ -434,18 +434,36 @@ export default function HighticketData() {
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
       setUploadProgress(15);
 
+      // Fetch SH2M data for client ID lookup by phone
+      const { data: sh2mData } = await supabase
+        .from("sh2m_data")
+        .select("client_id, nohp_client");
+      
+      // Create phone to client_id map
+      const phoneToClientId = new Map<string, string>();
+      sh2mData?.forEach(item => {
+        const normalizedPhone = String(item.nohp_client).replace(/[^\d]/g, '');
+        if (normalizedPhone && item.client_id) {
+          phoneToClientId.set(normalizedPhone, item.client_id);
+        }
+      });
+
+      setUploadProgress(20);
+
       const processedData: any[] = [];
       const parsingErrors: string[] = [];
       const totalRows = (jsonData as any[]).length;
 
       for (let i = 0; i < totalRows; i++) {
         const row = (jsonData as any[])[i];
-        const rowProgress = 15 + Math.floor((i / totalRows) * 70);
+        const rowProgress = 20 + Math.floor((i / totalRows) * 65);
         setUploadProgress(rowProgress);
 
-        // Map columns - support various naming conventions
+        // Map columns - support various naming conventions including user's format
+        // User's format: Kolom D = tanggal, Nama, NoHP, Product, Price, Status Payment, Closing by, SH2M Leads EC
         const tanggalTransaksi = parseDateFromFile(
-          row.tanggal_transaksi || row['Tanggal Transaksi'] || row.tanggal || row.Tanggal
+          row.tanggal_transaksi || row['Tanggal Transaksi'] || row.tanggal || row.Tanggal ||
+          row['Tanggal'] || row['Date'] || row['__EMPTY_3'] // Column D might be __EMPTY_3
         );
         
         if (!tanggalTransaksi) {
@@ -453,27 +471,62 @@ export default function HighticketData() {
           continue;
         }
 
-        const clientId = row.client_id || row['Client ID'] || row.client || '';
-        const nama = row.nama || row.Nama || row.name || '';
-        const nohp = String(row.nohp || row['No HP'] || row.phone || '').replace(/[^\d+]/g, '');
-        const category = row.category || row.Category || 'Program';
-        const namaProgram = row.nama_program || row['Nama Program'] || '';
-        const harga = parseFloat(String(row.harga || row.Harga || row.price || '0').replace(/[^\d.]/g, '')) || 0;
-        const statusPayment = row.status_payment || row['Status Payment'] || 'Lunas';
-        const namaEc = row.nama_ec || row['Nama EC'] || '';
+        // Get nama - support multiple column names
+        const nama = row.nama || row.Nama || row.name || row.Name || '';
         
-        const tanggalSh2m = parseDateFromFile(row.tanggal_sh2m || row['Tanggal SH2M']);
+        // Get phone number - support multiple column names including "NoHP"
+        const rawPhone = row.nohp || row['No HP'] || row.NoHP || row.phone || row.Phone || row['No. HP'] || '';
+        const nohp = String(rawPhone).replace(/[^\d]/g, '');
+        
+        // Get client ID - try from file first, then lookup by phone
+        let clientId = row.client_id || row['Client ID'] || row.ClientID || row.client || '';
+        if (!clientId && nohp) {
+          // Lookup client_id from sh2m_data by phone number
+          clientId = phoneToClientId.get(nohp) || '';
+          // If still no client_id, generate one based on date and phone
+          if (!clientId && nohp.length >= 4) {
+            const dateStr = format(tanggalTransaksi, 'yyMMdd');
+            const phoneSuffix = nohp.slice(-4);
+            clientId = `${dateStr}-${phoneSuffix}-H`;
+          }
+        }
+        
+        // Category
+        const category = row.category || row.Category || row.Kategori || 'Program';
+        
+        // Product/Program name - support "Product" column
+        const namaProgram = row.nama_program || row['Nama Program'] || row.Product || row.product || row.Program || '';
+        
+        // Price/Harga - support "Price" column
+        const hargaRaw = row.harga || row.Harga || row.Price || row.price || '0';
+        const harga = parseFloat(String(hargaRaw).replace(/[^\d.]/g, '')) || 0;
+        
+        // Status Payment
+        const statusPayment = row.status_payment || row['Status Payment'] || row.StatusPayment || row.Status || 'Lunas';
+        
+        // EC Name - support "Closing by" column
+        const namaEc = row.nama_ec || row['Nama EC'] || row['Closing by'] || row['Closing By'] || row.ClosingBy || '';
+        
+        // Tanggal SH2M - support "SH2M Leads EC" column
+        const tanggalSh2m = parseDateFromFile(
+          row.tanggal_sh2m || row['Tanggal SH2M'] || row['SH2M Leads EC'] || row['SH2M'] || row.SH2M
+        );
+        
+        // Pelaksanaan Program
         const pelaksanaanProgram = parseDateFromFile(row.pelaksanaan_program || row['Pelaksanaan Program']);
-        const keterangan = row.keterangan || row.Keterangan || '';
+        
+        // Keterangan
+        const keterangan = row.keterangan || row.Keterangan || row.Notes || row.notes || '';
 
-        if (!clientId || !nama) {
-          parsingErrors.push(`Baris ${i + 1}: client_id atau nama kosong`);
+        // Validate required fields - only nama is required, client_id can be generated
+        if (!nama) {
+          parsingErrors.push(`Baris ${i + 1}: nama kosong`);
           continue;
         }
 
         processedData.push({
           tanggal_transaksi: toYMD(tanggalTransaksi),
-          client_id: clientId,
+          client_id: clientId || `AUTO-${i + 1}`,
           nama: nama,
           nohp: nohp,
           category: category,
