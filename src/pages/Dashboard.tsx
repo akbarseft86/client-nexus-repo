@@ -570,15 +570,96 @@ export default function Dashboard() {
     },
   });
 
-  // Calculate YoY summary metrics
-  const yoyMetrics = yoyComparisonData?.reduce((acc, month) => {
+  // Get SH2M YoY data (current year vs previous year)
+  const { data: sh2mYoyData } = useQuery({
+    queryKey: ["dashboard-sh2m-yoy", branchFilter, selectedYear],
+    queryFn: async () => {
+      const PAGE_SIZE = 1000;
+      
+      // Fetch current year SH2M
+      let currentYearSH2M: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        let query = supabase
+          .from("sh2m_revenue")
+          .select("omset")
+          .eq("tahun", selectedYear)
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          currentYearSH2M = [...currentYearSH2M, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      // Fetch previous year SH2M
+      let prevYearSH2M: any[] = [];
+      from = 0;
+      hasMore = true;
+      
+      while (hasMore) {
+        let query = supabase
+          .from("sh2m_revenue")
+          .select("omset")
+          .eq("tahun", previousYear)
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          prevYearSH2M = [...prevYearSH2M, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      const currentYearTotal = currentYearSH2M.reduce((sum, d) => sum + (d.omset || 0), 0);
+      const prevYearTotal = prevYearSH2M.reduce((sum, d) => sum + (d.omset || 0), 0);
+      
+      return { currentYearTotal, prevYearTotal };
+    },
+  });
+
+  // Calculate YoY summary metrics for Highticket
+  const yoyHighticketMetrics = yoyComparisonData?.reduce((acc, month) => {
     acc.currentYearTotal += month[selectedYear] || 0;
     acc.prevYearTotal += month[previousYear] || 0;
     return acc;
   }, { currentYearTotal: 0, prevYearTotal: 0 });
 
-  const yoyGrowthPercent = yoyMetrics?.prevYearTotal > 0
-    ? ((yoyMetrics.currentYearTotal - yoyMetrics.prevYearTotal) / yoyMetrics.prevYearTotal * 100)
+  const yoyHighticketGrowth = yoyHighticketMetrics?.prevYearTotal > 0
+    ? ((yoyHighticketMetrics.currentYearTotal - yoyHighticketMetrics.prevYearTotal) / yoyHighticketMetrics.prevYearTotal * 100)
+    : 0;
+
+  // Calculate YoY summary metrics for SH2M
+  const yoySH2MGrowth = sh2mYoyData?.prevYearTotal > 0
+    ? ((sh2mYoyData.currentYearTotal - sh2mYoyData.prevYearTotal) / sh2mYoyData.prevYearTotal * 100)
+    : 0;
+
+  // Calculate YoY combined (Highticket + SH2M)
+  const yoyCombinedCurrentYear = (yoyHighticketMetrics?.currentYearTotal || 0) + (sh2mYoyData?.currentYearTotal || 0);
+  const yoyCombinedPrevYear = (yoyHighticketMetrics?.prevYearTotal || 0) + (sh2mYoyData?.prevYearTotal || 0);
+  const yoyCombinedGrowth = yoyCombinedPrevYear > 0
+    ? ((yoyCombinedCurrentYear - yoyCombinedPrevYear) / yoyCombinedPrevYear * 100)
     : 0;
 
   const formatCurrency = (value: number) => {
@@ -762,32 +843,89 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* YoY Growth Card */}
-      <Card className="bg-gradient-to-r from-primary/5 to-primary/10">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium">
-            Year-over-Year Growth ({previousYear} → {selectedYear})
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            {getGrowthIndicator(yoyGrowthPercent)}
-            <span className={`text-lg font-bold ${yoyGrowthPercent > 0 ? 'text-emerald-500' : yoyGrowthPercent < 0 ? 'text-red-500' : 'text-yellow-500'}`}>
-              {yoyGrowthPercent > 0 ? '+' : ''}{yoyGrowthPercent.toFixed(1)}%
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Revenue {previousYear}</p>
-              <p className="text-lg font-semibold">Rp {(yoyMetrics?.prevYearTotal || 0).toLocaleString('id-ID')}</p>
+      {/* YoY Growth Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* YoY Highticket */}
+        <Card className="bg-gradient-to-r from-indigo-500/5 to-indigo-500/10">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">
+              YoY Highticket ({previousYear} → {selectedYear})
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {getGrowthIndicator(yoyHighticketGrowth)}
+              <span className={`text-lg font-bold ${yoyHighticketGrowth > 0 ? 'text-emerald-500' : yoyHighticketGrowth < 0 ? 'text-red-500' : 'text-yellow-500'}`}>
+                {yoyHighticketGrowth > 0 ? '+' : ''}{yoyHighticketGrowth.toFixed(1)}%
+              </span>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Revenue {selectedYear}</p>
-              <p className="text-lg font-semibold">Rp {(yoyMetrics?.currentYearTotal || 0).toLocaleString('id-ID')}</p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Revenue {previousYear}</p>
+                <p className="text-lg font-semibold">Rp {(yoyHighticketMetrics?.prevYearTotal || 0).toLocaleString('id-ID')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Revenue {selectedYear}</p>
+                <p className="text-lg font-semibold">Rp {(yoyHighticketMetrics?.currentYearTotal || 0).toLocaleString('id-ID')}</p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* YoY SH2M */}
+        <Card className="bg-gradient-to-r from-teal-500/5 to-teal-500/10">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">
+              YoY SH2M ({previousYear} → {selectedYear})
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {getGrowthIndicator(yoySH2MGrowth)}
+              <span className={`text-lg font-bold ${yoySH2MGrowth > 0 ? 'text-emerald-500' : yoySH2MGrowth < 0 ? 'text-red-500' : 'text-yellow-500'}`}>
+                {yoySH2MGrowth > 0 ? '+' : ''}{yoySH2MGrowth.toFixed(1)}%
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Revenue {previousYear}</p>
+                <p className="text-lg font-semibold">Rp {(sh2mYoyData?.prevYearTotal || 0).toLocaleString('id-ID')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Revenue {selectedYear}</p>
+                <p className="text-lg font-semibold">Rp {(sh2mYoyData?.currentYearTotal || 0).toLocaleString('id-ID')}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* YoY Gabungan */}
+        <Card className="bg-gradient-to-r from-primary/5 to-primary/10">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">
+              YoY Gabungan ({previousYear} → {selectedYear})
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {getGrowthIndicator(yoyCombinedGrowth)}
+              <span className={`text-lg font-bold ${yoyCombinedGrowth > 0 ? 'text-emerald-500' : yoyCombinedGrowth < 0 ? 'text-red-500' : 'text-yellow-500'}`}>
+                {yoyCombinedGrowth > 0 ? '+' : ''}{yoyCombinedGrowth.toFixed(1)}%
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Revenue {previousYear}</p>
+                <p className="text-lg font-semibold">Rp {yoyCombinedPrevYear.toLocaleString('id-ID')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Revenue {selectedYear}</p>
+                <p className="text-lg font-semibold">Rp {yoyCombinedCurrentYear.toLocaleString('id-ID')}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Monthly Revenue Table - Based on Selected Branch */}
       <Card>
