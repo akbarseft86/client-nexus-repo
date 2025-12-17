@@ -1,4 +1,4 @@
-import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle, Shield, Users, BarChart3, FolderInput, FileType } from "lucide-react";
+import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle, Shield, Users, BarChart3, FolderInput, FileType, TrendingUp } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +26,7 @@ export default function Navigation() {
     { to: "/ceo-dashboard", icon: BarChart3, label: "CEO Command Center", showOnlyInPreview: true },
     { to: "/", icon: Database, label: "Data SH2M", hideInPreview: false },
     { to: "/highticket", icon: FileText, label: "Data Highticket", hideInPreview: false },
+    { to: "/sh2m-revenue", icon: TrendingUp, label: "Revenue SH2M", hideInPreview: true },
     { to: "/data-staging", icon: FolderInput, label: "Data Staging", showOnlyInPreview: true },
     { to: "/cicilan", icon: CreditCard, label: "Data Cicilan", hideInPreview: true },
     { to: "/search", icon: Search, label: "Pencarian Client", hideInPreview: false },

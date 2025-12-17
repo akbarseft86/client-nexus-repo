@@ -18,6 +18,7 @@ import DataTrust from "@/pages/DataTrust";
 import ClientsCRM from "@/pages/ClientsCRM";
 import CEODashboard from "@/pages/CEODashboard";
 import DataStaging from "@/pages/DataStaging";
+import SH2MRevenue from "@/pages/SH2MRevenue";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
                 <Route path="/" element={<SH2MData />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/highticket" element={<HighticketData />} />
+                <Route path="/sh2m-revenue" element={<SH2MRevenue />} />
                 <Route path="/data-staging" element={<DataStaging />} />
                 <Route path="/cicilan" element={<CicilanData />} />
                 <Route path="/search" element={<SearchClient />} />

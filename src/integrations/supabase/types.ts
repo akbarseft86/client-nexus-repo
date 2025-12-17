@@ -232,6 +232,45 @@ export type Database = {
         }
         Relationships: []
       }
+      sh2m_revenue: {
+        Row: {
+          asal_iklan: string
+          closing: number
+          created_at: string
+          id: string
+          jumlah_leads: number
+          keterangan: string | null
+          nama_cs: string
+          omset: number
+          tanggal: string
+          updated_at: string
+        }
+        Insert: {
+          asal_iklan?: string
+          closing?: number
+          created_at?: string
+          id?: string
+          jumlah_leads?: number
+          keterangan?: string | null
+          nama_cs: string
+          omset?: number
+          tanggal: string
+          updated_at?: string
+        }
+        Update: {
+          asal_iklan?: string
+          closing?: number
+          created_at?: string
+          id?: string
+          jumlah_leads?: number
+          keterangan?: string | null
+          nama_cs?: string
+          omset?: number
+          tanggal?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       source_iklan_categories: {
         Row: {
           created_at: string
