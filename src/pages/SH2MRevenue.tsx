@@ -77,12 +77,12 @@ interface SH2MRevenueData {
 export default function SH2MRevenue() {
   const { selectedBranch, getBranchFilter } = useBranch();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [editingData, setEditingData] = useState<SH2MRevenueData | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   
@@ -207,25 +207,34 @@ export default function SH2MRevenue() {
     return 0;
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    setSelectedFile(file || null);
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      toast.error("Pilih file terlebih dahulu");
+      return;
+    }
 
     setIsUploading(true);
     setUploadProgress(5);
 
     try {
-      const data = await file.arrayBuffer();
-      setUploadProgress(15);
+      const data = await selectedFile.arrayBuffer();
+      setUploadProgress(10);
 
-      const workbook = XLSX.read(data);
+      // Handle CSV with semicolon delimiter
+      const workbook = XLSX.read(data, { type: 'array', FS: ';' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      setUploadProgress(30);
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
+      setUploadProgress(15);
 
       if (jsonData.length === 0) {
         toast.error("File tidak memiliki data");
+        setIsUploading(false);
         return;
       }
 
@@ -237,11 +246,15 @@ export default function SH2MRevenue() {
         asal_iklan: string;
       }> = [];
 
-      for (const row of jsonData as any[]) {
+      const totalRows = jsonData.length;
+      
+      for (let i = 0; i < totalRows; i++) {
+        const row = jsonData[i] as any;
+        
         const tahun = parseInt(row.tahun || row.Tahun || row.TAHUN) || currentYear;
         const bulan = parseMonth(row.bulan || row.Bulan || row.BULAN);
         const omset = parseOmset(row.omset || row.Omset || row.OMSET || row["Jumlah Omset"] || row["jumlah omset"]);
-        const nama_cs = String(row.nama_cs || row["Nama CS"] || row["nama cs"] || row.NamaCS || row["Nama_CS"] || "").trim();
+        const nama_cs = String(row.nama_cs || row["Nama CS"] || row["nama cs"] || row.NamaCS || row["Nama_CS"] || row["CS"] || "").trim();
 
         if (nama_cs) {
           parsedData.push({
@@ -252,12 +265,16 @@ export default function SH2MRevenue() {
             asal_iklan: branchFilter || "SEFT Corp - Jogja",
           });
         }
+        
+        // Update progress during processing
+        setUploadProgress(15 + Math.floor((i / totalRows) * 35));
       }
 
       setUploadProgress(50);
 
       if (parsedData.length === 0) {
         toast.error("Tidak ada data valid untuk diupload. Pastikan kolom Nama CS terisi.");
+        setIsUploading(false);
         return;
       }
 
@@ -267,22 +284,20 @@ export default function SH2MRevenue() {
         const batch = parsedData.slice(i, i + batchSize);
         const { error } = await supabase.from("sh2m_revenue").insert(batch);
         if (error) throw error;
-        setUploadProgress(50 + ((i + batchSize) / parsedData.length) * 50);
+        setUploadProgress(50 + Math.floor(((i + batchSize) / parsedData.length) * 50));
       }
 
       setUploadProgress(100);
       queryClient.invalidateQueries({ queryKey: ["sh2m-revenue"] });
       toast.success(`${parsedData.length} data berhasil diupload`);
-      setIsUploadOpen(false);
+      setUploadDialogOpen(false);
+      setSelectedFile(null);
 
     } catch (error: any) {
       toast.error("Gagal upload: " + error.message);
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
   };
 
@@ -338,7 +353,13 @@ export default function SH2MRevenue() {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Data Revenue SH2M - {selectedBranch}</h1>
         <div className="flex gap-2">
-          <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+          <Dialog open={uploadDialogOpen} onOpenChange={(open) => {
+            setUploadDialogOpen(open);
+            if (!open) {
+              setSelectedFile(null);
+              setUploadProgress(0);
+            }
+          }}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Upload className="h-4 w-4 mr-2" />
@@ -356,13 +377,21 @@ export default function SH2MRevenue() {
                 <p className="text-sm text-muted-foreground">
                   Bulan bisa berupa angka (1-12) atau nama bulan (Januari, Februari, dll)
                 </p>
-                <Input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileUpload}
-                  disabled={isUploading}
-                />
+                <div>
+                  <Label>Pilih File (Excel/CSV)</Label>
+                  <Input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleFileSelect}
+                    disabled={isUploading}
+                    className="mt-1"
+                  />
+                </div>
+                {selectedFile && (
+                  <p className="text-sm text-muted-foreground">
+                    File dipilih: {selectedFile.name}
+                  </p>
+                )}
                 {isUploading && (
                   <div className="space-y-2">
                     <Progress value={uploadProgress} />
@@ -371,6 +400,13 @@ export default function SH2MRevenue() {
                     </p>
                   </div>
                 )}
+                <Button 
+                  onClick={handleFileUpload} 
+                  className="w-full" 
+                  disabled={!selectedFile || isUploading}
+                >
+                  {isUploading ? "Mengupload..." : "Upload Data"}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
