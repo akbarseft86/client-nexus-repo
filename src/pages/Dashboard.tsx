@@ -789,12 +789,12 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Monthly Revenue Table - All Branches */}
+      {/* Monthly Revenue Table - Based on Selected Branch */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Data Revenue Bulanan {selectedYear} - Semua Cabang
+            Data Revenue Bulanan {selectedYear} - {selectedBranch}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -803,52 +803,82 @@ export default function Dashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-semibold">Bulan</TableHead>
-                  <TableHead className="text-right font-semibold">HT Bekasi</TableHead>
-                  <TableHead className="text-right font-semibold">HT Jogja</TableHead>
-                  <TableHead className="text-right font-semibold">SH2M Bekasi</TableHead>
-                  <TableHead className="text-right font-semibold">SH2M Jogja</TableHead>
-                  <TableHead className="text-right font-semibold bg-blue-500/10">Total Bekasi</TableHead>
-                  <TableHead className="text-right font-semibold bg-green-500/10">Total Jogja</TableHead>
-                  <TableHead className="text-right font-semibold bg-primary/10">Grand Total</TableHead>
+                  {(!branchFilter || branchFilter.toLowerCase().includes('bekasi')) && (
+                    <>
+                      <TableHead className="text-right font-semibold">HT Bekasi</TableHead>
+                      <TableHead className="text-right font-semibold">SH2M Bekasi</TableHead>
+                      <TableHead className="text-right font-semibold bg-blue-500/10">Total Bekasi</TableHead>
+                    </>
+                  )}
+                  {(!branchFilter || branchFilter.toLowerCase().includes('jogja')) && (
+                    <>
+                      <TableHead className="text-right font-semibold">HT Jogja</TableHead>
+                      <TableHead className="text-right font-semibold">SH2M Jogja</TableHead>
+                      <TableHead className="text-right font-semibold bg-green-500/10">Total Jogja</TableHead>
+                    </>
+                  )}
+                  {!branchFilter && (
+                    <TableHead className="text-right font-semibold bg-primary/10">Grand Total</TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {allBranchMonthlyData?.map((row, index) => (
                   <TableRow key={index} className={index === selectedMonth ? "bg-primary/5" : ""}>
                     <TableCell className="font-medium">{row.bulan}</TableCell>
-                    <TableCell className="text-right">Rp {row.htBekasi.toLocaleString('id-ID')}</TableCell>
-                    <TableCell className="text-right">Rp {row.htJogja.toLocaleString('id-ID')}</TableCell>
-                    <TableCell className="text-right">Rp {row.sh2mBekasi.toLocaleString('id-ID')}</TableCell>
-                    <TableCell className="text-right">Rp {row.sh2mJogja.toLocaleString('id-ID')}</TableCell>
-                    <TableCell className="text-right font-semibold bg-blue-500/5">Rp {row.totalBekasi.toLocaleString('id-ID')}</TableCell>
-                    <TableCell className="text-right font-semibold bg-green-500/5">Rp {row.totalJogja.toLocaleString('id-ID')}</TableCell>
-                    <TableCell className="text-right font-bold bg-primary/5">Rp {row.grandTotal.toLocaleString('id-ID')}</TableCell>
+                    {(!branchFilter || branchFilter.toLowerCase().includes('bekasi')) && (
+                      <>
+                        <TableCell className="text-right">Rp {row.htBekasi.toLocaleString('id-ID')}</TableCell>
+                        <TableCell className="text-right">Rp {row.sh2mBekasi.toLocaleString('id-ID')}</TableCell>
+                        <TableCell className="text-right font-semibold bg-blue-500/5">Rp {row.totalBekasi.toLocaleString('id-ID')}</TableCell>
+                      </>
+                    )}
+                    {(!branchFilter || branchFilter.toLowerCase().includes('jogja')) && (
+                      <>
+                        <TableCell className="text-right">Rp {row.htJogja.toLocaleString('id-ID')}</TableCell>
+                        <TableCell className="text-right">Rp {row.sh2mJogja.toLocaleString('id-ID')}</TableCell>
+                        <TableCell className="text-right font-semibold bg-green-500/5">Rp {row.totalJogja.toLocaleString('id-ID')}</TableCell>
+                      </>
+                    )}
+                    {!branchFilter && (
+                      <TableCell className="text-right font-bold bg-primary/5">Rp {row.grandTotal.toLocaleString('id-ID')}</TableCell>
+                    )}
                   </TableRow>
                 ))}
                 {/* Total Row */}
                 <TableRow className="border-t-2 font-bold bg-muted/50">
                   <TableCell>TOTAL</TableCell>
-                  <TableCell className="text-right">
-                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.htBekasi, 0) || 0).toLocaleString('id-ID')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.htJogja, 0) || 0).toLocaleString('id-ID')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.sh2mBekasi, 0) || 0).toLocaleString('id-ID')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.sh2mJogja, 0) || 0).toLocaleString('id-ID')}
-                  </TableCell>
-                  <TableCell className="text-right bg-blue-500/10">
-                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.totalBekasi, 0) || 0).toLocaleString('id-ID')}
-                  </TableCell>
-                  <TableCell className="text-right bg-green-500/10">
-                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.totalJogja, 0) || 0).toLocaleString('id-ID')}
-                  </TableCell>
-                  <TableCell className="text-right bg-primary/10">
-                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.grandTotal, 0) || 0).toLocaleString('id-ID')}
-                  </TableCell>
+                  {(!branchFilter || branchFilter.toLowerCase().includes('bekasi')) && (
+                    <>
+                      <TableCell className="text-right">
+                        Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.htBekasi, 0) || 0).toLocaleString('id-ID')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.sh2mBekasi, 0) || 0).toLocaleString('id-ID')}
+                      </TableCell>
+                      <TableCell className="text-right bg-blue-500/10">
+                        Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.totalBekasi, 0) || 0).toLocaleString('id-ID')}
+                      </TableCell>
+                    </>
+                  )}
+                  {(!branchFilter || branchFilter.toLowerCase().includes('jogja')) && (
+                    <>
+                      <TableCell className="text-right">
+                        Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.htJogja, 0) || 0).toLocaleString('id-ID')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.sh2mJogja, 0) || 0).toLocaleString('id-ID')}
+                      </TableCell>
+                      <TableCell className="text-right bg-green-500/10">
+                        Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.totalJogja, 0) || 0).toLocaleString('id-ID')}
+                      </TableCell>
+                    </>
+                  )}
+                  {!branchFilter && (
+                    <TableCell className="text-right bg-primary/10">
+                      Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.grandTotal, 0) || 0).toLocaleString('id-ID')}
+                    </TableCell>
+                  )}
                 </TableRow>
               </TableBody>
             </Table>
