@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
@@ -28,8 +28,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 const CS_NAMES = ["Farah", "Intan", "Rizki", "Sefhia", "Yola"];
 
@@ -48,6 +50,21 @@ const MONTHS = [
   { value: 12, label: "Desember" },
 ];
 
+const MONTH_NAME_TO_NUMBER: Record<string, number> = {
+  januari: 1, jan: 1,
+  februari: 2, feb: 2,
+  maret: 3, mar: 3,
+  april: 4, apr: 4,
+  mei: 5, may: 5,
+  juni: 6, jun: 6,
+  juli: 7, jul: 7,
+  agustus: 8, agu: 8, aug: 8,
+  september: 9, sep: 9, sept: 9,
+  oktober: 10, okt: 10, oct: 10,
+  november: 11, nov: 11,
+  desember: 12, des: 12, dec: 12,
+};
+
 interface SH2MRevenueData {
   id: string;
   tahun: number;
@@ -60,9 +77,14 @@ interface SH2MRevenueData {
 export default function SH2MRevenue() {
   const { selectedBranch, getBranchFilter } = useBranch();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [editingData, setEditingData] = useState<SH2MRevenueData | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   
   const currentYear = new Date().getFullYear();
   const [formData, setFormData] = useState({
@@ -162,6 +184,108 @@ export default function SH2MRevenue() {
     });
   };
 
+  const parseMonth = (value: any): number => {
+    if (typeof value === "number") {
+      return value >= 1 && value <= 12 ? value : 1;
+    }
+    if (typeof value === "string") {
+      const num = parseInt(value);
+      if (!isNaN(num) && num >= 1 && num <= 12) return num;
+      
+      const lower = value.toLowerCase().trim();
+      return MONTH_NAME_TO_NUMBER[lower] || 1;
+    }
+    return 1;
+  };
+
+  const parseOmset = (value: any): number => {
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const cleaned = value.replace(/[^\d.-]/g, "");
+      return parseInt(cleaned) || 0;
+    }
+    return 0;
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadProgress(5);
+
+    try {
+      const data = await file.arrayBuffer();
+      setUploadProgress(15);
+
+      const workbook = XLSX.read(data);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      setUploadProgress(30);
+
+      if (jsonData.length === 0) {
+        toast.error("File tidak memiliki data");
+        return;
+      }
+
+      const parsedData: Array<{
+        tahun: number;
+        bulan: number;
+        omset: number;
+        nama_cs: string;
+        asal_iklan: string;
+      }> = [];
+
+      for (const row of jsonData as any[]) {
+        const tahun = parseInt(row.tahun || row.Tahun || row.TAHUN) || currentYear;
+        const bulan = parseMonth(row.bulan || row.Bulan || row.BULAN);
+        const omset = parseOmset(row.omset || row.Omset || row.OMSET || row["Jumlah Omset"] || row["jumlah omset"]);
+        const nama_cs = String(row.nama_cs || row["Nama CS"] || row["nama cs"] || row.NamaCS || row["Nama_CS"] || "").trim();
+
+        if (nama_cs) {
+          parsedData.push({
+            tahun,
+            bulan,
+            omset,
+            nama_cs,
+            asal_iklan: branchFilter || "SEFT Corp - Jogja",
+          });
+        }
+      }
+
+      setUploadProgress(50);
+
+      if (parsedData.length === 0) {
+        toast.error("Tidak ada data valid untuk diupload. Pastikan kolom Nama CS terisi.");
+        return;
+      }
+
+      // Insert in batches
+      const batchSize = 100;
+      for (let i = 0; i < parsedData.length; i += batchSize) {
+        const batch = parsedData.slice(i, i + batchSize);
+        const { error } = await supabase.from("sh2m_revenue").insert(batch);
+        if (error) throw error;
+        setUploadProgress(50 + ((i + batchSize) / parsedData.length) * 50);
+      }
+
+      setUploadProgress(100);
+      queryClient.invalidateQueries({ queryKey: ["sh2m-revenue"] });
+      toast.success(`${parsedData.length} data berhasil diupload`);
+      setIsUploadOpen(false);
+
+    } catch (error: any) {
+      toast.error("Gagal upload: " + error.message);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   const handleAdd = () => {
     if (!formData.nama_cs) {
       toast.error("Nama CS wajib diisi");
@@ -213,86 +337,125 @@ export default function SH2MRevenue() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Data Revenue SH2M - {selectedBranch}</h1>
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Tambah Data
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Tambah Data Revenue SH2M</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Tahun *</Label>
-                <Select
-                  value={formData.tahun.toString()}
-                  onValueChange={(value) => setFormData({ ...formData, tahun: parseInt(value) })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih Tahun" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {yearOptions.map((year) => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Bulan *</Label>
-                <Select
-                  value={formData.bulan.toString()}
-                  onValueChange={(value) => setFormData({ ...formData, bulan: parseInt(value) })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih Bulan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((month) => (
-                      <SelectItem key={month.value} value={month.value.toString()}>
-                        {month.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Nama CS *</Label>
-                <Select
-                  value={formData.nama_cs}
-                  onValueChange={(value) => setFormData({ ...formData, nama_cs: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih CS" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CS_NAMES.map((name) => (
-                      <SelectItem key={name} value={name}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Jumlah Omset</Label>
-                <Input
-                  type="number"
-                  value={formData.omset}
-                  onChange={(e) => setFormData({ ...formData, omset: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <Button onClick={handleAdd} className="w-full" disabled={addMutation.isPending}>
-                {addMutation.isPending ? "Menyimpan..." : "Simpan"}
+        <div className="flex gap-2">
+          <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Upload File
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Upload Data Revenue SH2M</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Format kolom yang diharapkan: <strong>Tahun, Bulan, Nama CS, Omset</strong>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Bulan bisa berupa angka (1-12) atau nama bulan (Januari, Februari, dll)
+                </p>
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                />
+                {isUploading && (
+                  <div className="space-y-2">
+                    <Progress value={uploadProgress} />
+                    <p className="text-sm text-center text-muted-foreground">
+                      {uploadProgress}% - Mengupload...
+                    </p>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+          
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Tambah Data
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Tambah Data Revenue SH2M</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Tahun *</Label>
+                  <Select
+                    value={formData.tahun.toString()}
+                    onValueChange={(value) => setFormData({ ...formData, tahun: parseInt(value) })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih Tahun" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {yearOptions.map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Bulan *</Label>
+                  <Select
+                    value={formData.bulan.toString()}
+                    onValueChange={(value) => setFormData({ ...formData, bulan: parseInt(value) })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih Bulan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((month) => (
+                        <SelectItem key={month.value} value={month.value.toString()}>
+                          {month.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Nama CS *</Label>
+                  <Select
+                    value={formData.nama_cs}
+                    onValueChange={(value) => setFormData({ ...formData, nama_cs: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih CS" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CS_NAMES.map((name) => (
+                        <SelectItem key={name} value={name}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Jumlah Omset</Label>
+                  <Input
+                    type="number"
+                    value={formData.omset}
+                    onChange={(e) => setFormData({ ...formData, omset: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+                <Button onClick={handleAdd} className="w-full" disabled={addMutation.isPending}>
+                  {addMutation.isPending ? "Menyimpan..." : "Simpan"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Summary Card */}
