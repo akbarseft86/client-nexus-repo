@@ -805,16 +805,16 @@ export default function Dashboard() {
                   <TableHead className="font-semibold">Bulan</TableHead>
                   {(!branchFilter || branchFilter.toLowerCase().includes('bekasi')) && (
                     <>
-                      <TableHead className="text-right font-semibold">HT Bekasi</TableHead>
-                      <TableHead className="text-right font-semibold">SH2M Bekasi</TableHead>
-                      <TableHead className="text-right font-semibold bg-blue-500/10">Total Bekasi</TableHead>
+                      <TableHead className="text-right font-semibold">{branchFilter ? 'Highticket' : 'HT Bekasi'}</TableHead>
+                      <TableHead className="text-right font-semibold">{branchFilter ? 'SH2M' : 'SH2M Bekasi'}</TableHead>
+                      <TableHead className="text-right font-semibold bg-blue-500/10">{branchFilter ? 'Total' : 'Total Bekasi'}</TableHead>
                     </>
                   )}
                   {(!branchFilter || branchFilter.toLowerCase().includes('jogja')) && (
                     <>
-                      <TableHead className="text-right font-semibold">HT Jogja</TableHead>
-                      <TableHead className="text-right font-semibold">SH2M Jogja</TableHead>
-                      <TableHead className="text-right font-semibold bg-green-500/10">Total Jogja</TableHead>
+                      <TableHead className="text-right font-semibold">{branchFilter ? 'Highticket' : 'HT Jogja'}</TableHead>
+                      <TableHead className="text-right font-semibold">{branchFilter ? 'SH2M' : 'SH2M Jogja'}</TableHead>
+                      <TableHead className="text-right font-semibold bg-green-500/10">{branchFilter ? 'Total' : 'Total Jogja'}</TableHead>
                     </>
                   )}
                   {!branchFilter && (
