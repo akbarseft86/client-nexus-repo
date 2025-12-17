@@ -30,7 +30,7 @@ export default function Navigation() {
     { to: "/cicilan", icon: CreditCard, label: "Data Cicilan", hideInPreview: true },
     { to: "/search", icon: Search, label: "Pencarian Client", hideInPreview: false },
     { to: "/source-categories", icon: Tags, label: "Kategori Source Iklan", hideInPreview: true },
-    { to: "/program-standardization", icon: FileType, label: "Standarisasi Nama Program", hideInPreview: true },
+    { to: "/program-standardization", icon: FileType, label: "Standarisasi Nama Program", showOnlyInPreview: true },
     { to: "/leads-ec", icon: UserCheck, label: "Leads EC", hideInPreview: false },
     { to: "/clients", icon: Users, label: "Clients CRM", showOnlyInPreview: true },
     { to: "/data-duplikat", icon: AlertTriangle, label: "Data Duplikat", showOnlyInPreview: true },

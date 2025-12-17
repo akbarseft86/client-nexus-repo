@@ -82,6 +82,7 @@ interface MappingRow {
   nama_standar: string | null;
   pelaksanaan: string | null;
   suffix: string | null;
+  category: string | null;
 }
 
 export default function ProgramStandardization() {
@@ -103,13 +104,14 @@ export default function ProgramStandardization() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (row: { id: string; nama_standar: string | null; pelaksanaan: string | null; suffix: string | null }) => {
+    mutationFn: async (row: { id: string; nama_standar: string | null; pelaksanaan: string | null; suffix: string | null; category: string | null }) => {
       const { error } = await supabase
         .from("program_name_mappings")
         .update({
           nama_standar: row.nama_standar,
           pelaksanaan: row.pelaksanaan,
           suffix: row.suffix,
+          category: row.category,
         })
         .eq("id", row.id);
       if (error) throw error;
@@ -147,6 +149,7 @@ export default function ProgramStandardization() {
       nama_standar: edited.nama_standar !== undefined ? edited.nama_standar : row.nama_standar,
       pelaksanaan: edited.pelaksanaan !== undefined ? edited.pelaksanaan : row.pelaksanaan,
       suffix: edited.suffix !== undefined ? edited.suffix : row.suffix,
+      category: edited.category !== undefined ? edited.category : row.category,
     });
     // Clear edited state for this row
     setEditedRows(prev => {
@@ -287,17 +290,18 @@ export default function ProgramStandardization() {
                 <TableHead className="w-[200px]">Nama Standar</TableHead>
                 <TableHead className="w-[200px]">Pelaksanaan</TableHead>
                 <TableHead className="w-[120px]">Suffix</TableHead>
+                <TableHead className="w-[120px]">Category</TableHead>
                 <TableHead className="w-[150px]">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center">Loading...</TableCell>
+                  <TableCell colSpan={6} className="text-center">Loading...</TableCell>
                 </TableRow>
               ) : mappings?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center">Tidak ada data</TableCell>
+                  <TableCell colSpan={6} className="text-center">Tidak ada data</TableCell>
                 </TableRow>
               ) : (
                 mappings?.map((row) => (
@@ -335,6 +339,21 @@ export default function ProgramStandardization() {
                           <SelectItem value="ALUMNI">ALUMNI</SelectItem>
                           <SelectItem value="CICILAN">CICILAN</SelectItem>
                           <SelectItem value="PELUNASAN">PELUNASAN</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={getFieldValue(row, 'category') || 'none'}
+                        onValueChange={(value) => handleFieldChange(row.id, 'category', value === 'none' ? '' : value)}
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="-" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">-</SelectItem>
+                          <SelectItem value="Program">Program</SelectItem>
+                          <SelectItem value="Merchandise">Merchandise</SelectItem>
                         </SelectContent>
                       </Select>
                     </TableCell>
