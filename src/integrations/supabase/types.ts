@@ -150,6 +150,7 @@ export type Database = {
       }
       program_name_mappings: {
         Row: {
+          category: string | null
           created_at: string
           id: string
           nama_program_original: string
@@ -159,6 +160,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          category?: string | null
           created_at?: string
           id?: string
           nama_program_original: string
@@ -168,6 +170,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          category?: string | null
           created_at?: string
           id?: string
           nama_program_original?: string
