@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBranch } from "@/contexts/BranchContext";
-import { DollarSign, TrendingUp, BarChart3, Calendar, CreditCard, Receipt } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, CreditCard, Receipt, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import { 
   format, 
   startOfMonth, 
@@ -40,6 +40,7 @@ import {
   ResponsiveContainer,
   Area,
   AreaChart,
+  Legend,
 } from "recharts";
 
 // Helper function to fetch all paginated data from Supabase
@@ -347,6 +348,75 @@ export default function Dashboard() {
     },
   });
 
+  // Get YoY comparison data (current year vs previous year monthly revenue)
+  const previousYear = selectedYear - 1;
+  const prevYearStartDate = format(startOfYear(setYear(new Date(), previousYear)), 'yyyy-MM-dd');
+  const prevYearEndDate = format(endOfYear(setYear(new Date(), previousYear)), 'yyyy-MM-dd');
+
+  const { data: yoyComparisonData } = useQuery({
+    queryKey: ["dashboard-yoy-comparison", branchFilter, selectedYear],
+    queryFn: async () => {
+      // Fetch current year data
+      const currentYearData = await fetchAllPaginated<{ tanggal_transaksi: string; harga: number }>(
+        () => supabase.from("highticket_data"),
+        "tanggal_transaksi, harga",
+        { 
+          branchFilter, 
+          dateRange: { start: yearStartDate, end: yearEndDate }
+        }
+      );
+
+      // Fetch previous year data
+      const prevYearData = await fetchAllPaginated<{ tanggal_transaksi: string; harga: number }>(
+        () => supabase.from("highticket_data"),
+        "tanggal_transaksi, harga",
+        { 
+          branchFilter, 
+          dateRange: { start: prevYearStartDate, end: prevYearEndDate }
+        }
+      );
+
+      // Group by month for both years
+      const currentYearMonthly: Record<number, number> = {};
+      const prevYearMonthly: Record<number, number> = {};
+      
+      for (let i = 0; i < 12; i++) {
+        currentYearMonthly[i] = 0;
+        prevYearMonthly[i] = 0;
+      }
+
+      currentYearData.forEach(tx => {
+        const month = parseISO(tx.tanggal_transaksi).getMonth();
+        currentYearMonthly[month] += tx.harga || 0;
+      });
+
+      prevYearData.forEach(tx => {
+        const month = parseISO(tx.tanggal_transaksi).getMonth();
+        prevYearMonthly[month] += tx.harga || 0;
+      });
+
+      return months.map(m => ({
+        name: m.label.substring(0, 3),
+        [selectedYear]: currentYearMonthly[m.value],
+        [previousYear]: prevYearMonthly[m.value],
+        growth: prevYearMonthly[m.value] > 0 
+          ? ((currentYearMonthly[m.value] - prevYearMonthly[m.value]) / prevYearMonthly[m.value] * 100).toFixed(1)
+          : currentYearMonthly[m.value] > 0 ? '∞' : '0',
+      }));
+    },
+  });
+
+  // Calculate YoY summary metrics
+  const yoyMetrics = yoyComparisonData?.reduce((acc, month) => {
+    acc.currentYearTotal += month[selectedYear] || 0;
+    acc.prevYearTotal += month[previousYear] || 0;
+    return acc;
+  }, { currentYearTotal: 0, prevYearTotal: 0 });
+
+  const yoyGrowthPercent = yoyMetrics?.prevYearTotal > 0
+    ? ((yoyMetrics.currentYearTotal - yoyMetrics.prevYearTotal) / yoyMetrics.prevYearTotal * 100)
+    : 0;
+
   const formatCurrency = (value: number) => {
     if (value >= 1000000000) {
       return `${(value / 1000000000).toFixed(1)}M`;
@@ -365,8 +435,8 @@ export default function Dashboard() {
           <p className="font-medium">{label}</p>
           {payload.map((entry: any, index: number) => (
             <p key={index} className="text-sm" style={{ color: entry.color }}>
-              {entry.name === 'revenue' ? 'Revenue' : entry.name === 'sales' ? 'Transaksi' : entry.name}: {
-                entry.name === 'revenue' 
+              {entry.name === 'revenue' ? 'Revenue' : entry.name}: {
+                typeof entry.value === 'number' 
                   ? `Rp ${entry.value.toLocaleString('id-ID')}` 
                   : entry.value
               }
@@ -376,6 +446,15 @@ export default function Dashboard() {
       );
     }
     return null;
+  };
+
+  const getGrowthIndicator = (growth: number) => {
+    if (growth > 1) {
+      return <ArrowUpRight className="h-4 w-4 text-emerald-500" />;
+    } else if (growth < -1) {
+      return <ArrowDownRight className="h-4 w-4 text-red-500" />;
+    }
+    return <Minus className="h-4 w-4 text-yellow-500" />;
   };
 
   return (
@@ -473,6 +552,33 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* YoY Growth Card */}
+      <Card className="bg-gradient-to-r from-primary/5 to-primary/10">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium">
+            Year-over-Year Growth ({previousYear} → {selectedYear})
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {getGrowthIndicator(yoyGrowthPercent)}
+            <span className={`text-lg font-bold ${yoyGrowthPercent > 0 ? 'text-emerald-500' : yoyGrowthPercent < 0 ? 'text-red-500' : 'text-yellow-500'}`}>
+              {yoyGrowthPercent > 0 ? '+' : ''}{yoyGrowthPercent.toFixed(1)}%
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Revenue {previousYear}</p>
+              <p className="text-lg font-semibold">Rp {(yoyMetrics?.prevYearTotal || 0).toLocaleString('id-ID')}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Revenue {selectedYear}</p>
+              <p className="text-lg font-semibold">Rp {(yoyMetrics?.currentYearTotal || 0).toLocaleString('id-ID')}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Monthly Revenue Chart */}
       <Card>
         <CardHeader>
@@ -499,6 +605,48 @@ export default function Dashboard() {
                   name="revenue"
                 />
               </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* YoY Comparison Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            YoY Comparison - {selectedYear} vs {previousYear}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={yoyComparisonData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="name" className="text-xs" />
+                <YAxis tickFormatter={formatCurrency} className="text-xs" />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey={selectedYear}
+                  stroke="hsl(var(--chart-1))" 
+                  strokeWidth={2}
+                  dot={{ fill: "hsl(var(--chart-1))", strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6 }}
+                  name={`${selectedYear}`}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey={previousYear}
+                  stroke="hsl(var(--chart-3))" 
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={{ fill: "hsl(var(--chart-3))", strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6 }}
+                  name={`${previousYear}`}
+                />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </CardContent>
