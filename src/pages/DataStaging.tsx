@@ -499,21 +499,22 @@ export default function DataStaging() {
     setIsAssigning(true);
     try {
       const asalIklan = targetBranch === "bekasi" ? "SEFT Corp - Bekasi" : "SEFT Corp - Jogja";
+      const today = new Date().toISOString().split('T')[0]; // fallback for empty dates
       
       const dataToInsert = stagingData.map(row => ({
-        tanggal_transaksi: row.tanggal_transaksi,
-        client_id: row.client_id,
-        nama: row.nama,
-        nohp: row.nohp,
-        nama_program: row.nama_program,
-        harga: row.harga,
-        harga_bayar: row.harga_bayar,
-        status_payment: row.status_payment,
-        nama_ec: row.nama_ec,
-        tanggal_sh2m: row.tanggal_sh2m,
-        pelaksanaan_program: row.pelaksanaan_program,
-        keterangan: row.keterangan,
-        category: row.category,
+        tanggal_transaksi: row.tanggal_transaksi || today,
+        client_id: row.client_id || `${today.replace(/-/g, '').slice(2)}-0000-X`,
+        nama: row.nama || '-',
+        nohp: row.nohp || '-',
+        nama_program: row.nama_program || '-',
+        harga: row.harga || 0,
+        harga_bayar: row.harga_bayar || null,
+        status_payment: row.status_payment || 'unpaid',
+        nama_ec: row.nama_ec || '-',
+        tanggal_sh2m: row.tanggal_sh2m || null,
+        pelaksanaan_program: row.pelaksanaan_program || null,
+        keterangan: row.keterangan || null,
+        category: row.category || 'Program',
         asal_iklan: asalIklan,
       }));
 
