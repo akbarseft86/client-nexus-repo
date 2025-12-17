@@ -28,22 +28,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { id as idLocale } from "date-fns/locale";
 
 const CS_NAMES = ["Farah", "Intan", "Rizki", "Sefhia", "Yola"];
 
+const MONTHS = [
+  { value: 1, label: "Januari" },
+  { value: 2, label: "Februari" },
+  { value: 3, label: "Maret" },
+  { value: 4, label: "April" },
+  { value: 5, label: "Mei" },
+  { value: 6, label: "Juni" },
+  { value: 7, label: "Juli" },
+  { value: 8, label: "Agustus" },
+  { value: 9, label: "September" },
+  { value: 10, label: "Oktober" },
+  { value: 11, label: "November" },
+  { value: 12, label: "Desember" },
+];
+
 interface SH2MRevenueData {
   id: string;
-  tanggal: string;
-  nama_cs: string;
-  jumlah_leads: number;
-  closing: number;
+  tahun: number;
+  bulan: number;
   omset: number;
-  keterangan: string | null;
+  nama_cs: string;
   asal_iklan: string;
 }
 
@@ -54,13 +64,12 @@ export default function SH2MRevenue() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingData, setEditingData] = useState<SH2MRevenueData | null>(null);
   
+  const currentYear = new Date().getFullYear();
   const [formData, setFormData] = useState({
-    tanggal: "",
-    nama_cs: "",
-    jumlah_leads: 0,
-    closing: 0,
+    tahun: currentYear,
+    bulan: new Date().getMonth() + 1,
     omset: 0,
-    keterangan: "",
+    nama_cs: "",
   });
 
   const branchFilter = getBranchFilter();
@@ -71,7 +80,8 @@ export default function SH2MRevenue() {
       let query = supabase
         .from("sh2m_revenue")
         .select("*")
-        .order("tanggal", { ascending: false });
+        .order("tahun", { ascending: false })
+        .order("bulan", { ascending: false });
 
       if (branchFilter) {
         query = query.eq("asal_iklan", branchFilter);
@@ -86,12 +96,10 @@ export default function SH2MRevenue() {
   const addMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const { error } = await supabase.from("sh2m_revenue").insert({
-        tanggal: data.tanggal,
-        nama_cs: data.nama_cs,
-        jumlah_leads: data.jumlah_leads,
-        closing: data.closing,
+        tahun: data.tahun,
+        bulan: data.bulan,
         omset: data.omset,
-        keterangan: data.keterangan || null,
+        nama_cs: data.nama_cs,
         asal_iklan: branchFilter || "SEFT Corp - Jogja",
       });
       if (error) throw error;
@@ -112,12 +120,10 @@ export default function SH2MRevenue() {
       const { error } = await supabase
         .from("sh2m_revenue")
         .update({
-          tanggal: data.tanggal,
-          nama_cs: data.nama_cs,
-          jumlah_leads: data.jumlah_leads,
-          closing: data.closing,
+          tahun: data.tahun,
+          bulan: data.bulan,
           omset: data.omset,
-          keterangan: data.keterangan,
+          nama_cs: data.nama_cs,
         })
         .eq("id", data.id);
       if (error) throw error;
@@ -149,18 +155,16 @@ export default function SH2MRevenue() {
 
   const resetForm = () => {
     setFormData({
-      tanggal: "",
-      nama_cs: "",
-      jumlah_leads: 0,
-      closing: 0,
+      tahun: currentYear,
+      bulan: new Date().getMonth() + 1,
       omset: 0,
-      keterangan: "",
+      nama_cs: "",
     });
   };
 
   const handleAdd = () => {
-    if (!formData.tanggal || !formData.nama_cs) {
-      toast.error("Tanggal dan Nama CS wajib diisi");
+    if (!formData.nama_cs) {
+      toast.error("Nama CS wajib diisi");
       return;
     }
     addMutation.mutate(formData);
@@ -183,11 +187,6 @@ export default function SH2MRevenue() {
     }
   };
 
-  const calculateClosingRate = (leads: number, closing: number) => {
-    if (leads === 0) return "0%";
-    return ((closing / leads) * 100).toFixed(1) + "%";
-  };
-
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
@@ -196,19 +195,15 @@ export default function SH2MRevenue() {
     }).format(value);
   };
 
-  const formatDate = (dateStr: string) => {
-    try {
-      return format(new Date(dateStr), "dd MMMM yyyy", { locale: idLocale });
-    } catch {
-      return dateStr;
-    }
+  const getMonthName = (month: number) => {
+    return MONTHS.find((m) => m.value === month)?.label || "-";
   };
 
   // Summary calculations
-  const totalLeads = revenueData?.reduce((sum, d) => sum + d.jumlah_leads, 0) || 0;
-  const totalClosing = revenueData?.reduce((sum, d) => sum + d.closing, 0) || 0;
   const totalOmset = revenueData?.reduce((sum, d) => sum + Number(d.omset), 0) || 0;
-  const avgClosingRate = totalLeads > 0 ? ((totalClosing / totalLeads) * 100).toFixed(1) : "0";
+
+  // Generate year options (current year and 5 years back)
+  const yearOptions = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
   if (isLoading) {
     return <div className="p-6">Loading...</div>;
@@ -231,12 +226,40 @@ export default function SH2MRevenue() {
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label>Tanggal *</Label>
-                <Input
-                  type="date"
-                  value={formData.tanggal}
-                  onChange={(e) => setFormData({ ...formData, tanggal: e.target.value })}
-                />
+                <Label>Tahun *</Label>
+                <Select
+                  value={formData.tahun.toString()}
+                  onValueChange={(value) => setFormData({ ...formData, tahun: parseInt(value) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih Tahun" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {yearOptions.map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Bulan *</Label>
+                <Select
+                  value={formData.bulan.toString()}
+                  onValueChange={(value) => setFormData({ ...formData, bulan: parseInt(value) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih Bulan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map((month) => (
+                      <SelectItem key={month.value} value={month.value.toString()}>
+                        {month.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Nama CS *</Label>
@@ -257,42 +280,11 @@ export default function SH2MRevenue() {
                 </Select>
               </div>
               <div>
-                <Label>Jumlah Leads</Label>
-                <Input
-                  type="number"
-                  value={formData.jumlah_leads}
-                  onChange={(e) => setFormData({ ...formData, jumlah_leads: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <Label>Closing</Label>
-                <Input
-                  type="number"
-                  value={formData.closing}
-                  onChange={(e) => setFormData({ ...formData, closing: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <Label>Closing Rate</Label>
-                <Input
-                  value={calculateClosingRate(formData.jumlah_leads, formData.closing)}
-                  disabled
-                  className="bg-muted"
-                />
-              </div>
-              <div>
-                <Label>Omset</Label>
+                <Label>Jumlah Omset</Label>
                 <Input
                   type="number"
                   value={formData.omset}
                   onChange={(e) => setFormData({ ...formData, omset: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <Label>Keterangan</Label>
-                <Textarea
-                  value={formData.keterangan}
-                  onChange={(e) => setFormData({ ...formData, keterangan: e.target.value })}
                 />
               </div>
               <Button onClick={handleAdd} className="w-full" disabled={addMutation.isPending}>
@@ -303,41 +295,15 @@ export default function SH2MRevenue() {
         </Dialog>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Leads</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{totalLeads.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Closing</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{totalClosing.toLocaleString()}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Closing Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{avgClosingRate}%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Omset</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(totalOmset)}</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Summary Card */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Total Omset</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-2xl font-bold">{formatCurrency(totalOmset)}</p>
+        </CardContent>
+      </Card>
 
       {/* Data Table */}
       <Card>
@@ -345,26 +311,20 @@ export default function SH2MRevenue() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Tanggal</TableHead>
+                <TableHead>Tahun</TableHead>
+                <TableHead>Bulan</TableHead>
                 <TableHead>Nama CS</TableHead>
-                <TableHead className="text-right">Jumlah Leads</TableHead>
-                <TableHead className="text-right">Closing</TableHead>
-                <TableHead className="text-right">Closing Rate</TableHead>
-                <TableHead className="text-right">Omset</TableHead>
-                <TableHead>Keterangan</TableHead>
+                <TableHead className="text-right">Jumlah Omset</TableHead>
                 <TableHead className="w-[100px]">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {revenueData?.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell>{formatDate(row.tanggal)}</TableCell>
+                  <TableCell>{row.tahun}</TableCell>
+                  <TableCell>{getMonthName(row.bulan)}</TableCell>
                   <TableCell>{row.nama_cs}</TableCell>
-                  <TableCell className="text-right">{row.jumlah_leads.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{row.closing.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{calculateClosingRate(row.jumlah_leads, row.closing)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(Number(row.omset))}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{row.keterangan || "-"}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(row)}>
@@ -379,7 +339,7 @@ export default function SH2MRevenue() {
               ))}
               {(!revenueData || revenueData.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Belum ada data
                   </TableCell>
                 </TableRow>
@@ -398,12 +358,40 @@ export default function SH2MRevenue() {
           {editingData && (
             <div className="space-y-4">
               <div>
-                <Label>Tanggal *</Label>
-                <Input
-                  type="date"
-                  value={editingData.tanggal}
-                  onChange={(e) => setEditingData({ ...editingData, tanggal: e.target.value })}
-                />
+                <Label>Tahun *</Label>
+                <Select
+                  value={editingData.tahun.toString()}
+                  onValueChange={(value) => setEditingData({ ...editingData, tahun: parseInt(value) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih Tahun" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {yearOptions.map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Bulan *</Label>
+                <Select
+                  value={editingData.bulan.toString()}
+                  onValueChange={(value) => setEditingData({ ...editingData, bulan: parseInt(value) })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih Bulan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map((month) => (
+                      <SelectItem key={month.value} value={month.value.toString()}>
+                        {month.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Nama CS *</Label>
@@ -424,42 +412,11 @@ export default function SH2MRevenue() {
                 </Select>
               </div>
               <div>
-                <Label>Jumlah Leads</Label>
-                <Input
-                  type="number"
-                  value={editingData.jumlah_leads}
-                  onChange={(e) => setEditingData({ ...editingData, jumlah_leads: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <Label>Closing</Label>
-                <Input
-                  type="number"
-                  value={editingData.closing}
-                  onChange={(e) => setEditingData({ ...editingData, closing: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <Label>Closing Rate</Label>
-                <Input
-                  value={calculateClosingRate(editingData.jumlah_leads, editingData.closing)}
-                  disabled
-                  className="bg-muted"
-                />
-              </div>
-              <div>
-                <Label>Omset</Label>
+                <Label>Jumlah Omset</Label>
                 <Input
                   type="number"
                   value={editingData.omset}
                   onChange={(e) => setEditingData({ ...editingData, omset: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <Label>Keterangan</Label>
-                <Textarea
-                  value={editingData.keterangan || ""}
-                  onChange={(e) => setEditingData({ ...editingData, keterangan: e.target.value })}
                 />
               </div>
               <Button onClick={handleUpdate} className="w-full" disabled={updateMutation.isPending}>
