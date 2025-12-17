@@ -42,6 +42,9 @@ import {
   Area,
   AreaChart,
   Legend,
+  LabelList,
+  ReferenceLine,
+  ReferenceDot,
 } from "recharts";
 
 // Helper function to fetch all paginated data from Supabase
@@ -1067,25 +1070,74 @@ export default function Dashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyRevenueData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="name" className="text-xs" />
-                <YAxis tickFormatter={formatCurrency} className="text-xs" />
-                <Tooltip content={<CustomTooltip />} />
-                <Area 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="hsl(var(--primary))" 
-                  fill="hsl(var(--primary))" 
-                  fillOpacity={0.3}
-                  strokeWidth={2}
-                  name="revenue"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          {(() => {
+            const maxRevenue = monthlyRevenueData ? Math.max(...monthlyRevenueData.map(d => d.revenue)) : 0;
+            const minRevenue = monthlyRevenueData ? Math.min(...monthlyRevenueData.filter(d => d.revenue > 0).map(d => d.revenue)) : 0;
+            const maxMonth = monthlyRevenueData?.find(d => d.revenue === maxRevenue);
+            const minMonth = monthlyRevenueData?.find(d => d.revenue === minRevenue && d.revenue > 0);
+            
+            return (
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={monthlyRevenueData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="name" className="text-xs" />
+                    <YAxis tickFormatter={formatCurrency} className="text-xs" />
+                    <Tooltip content={<CustomTooltip />} />
+                    {maxMonth && (
+                      <ReferenceDot 
+                        x={maxMonth.name} 
+                        y={maxRevenue} 
+                        r={8} 
+                        fill="hsl(142, 76%, 36%)" 
+                        stroke="white" 
+                        strokeWidth={2}
+                      />
+                    )}
+                    {minMonth && minRevenue > 0 && (
+                      <ReferenceDot 
+                        x={minMonth.name} 
+                        y={minRevenue} 
+                        r={8} 
+                        fill="hsl(0, 84%, 60%)" 
+                        stroke="white" 
+                        strokeWidth={2}
+                      />
+                    )}
+                    <Area 
+                      type="monotone" 
+                      dataKey="revenue" 
+                      stroke="hsl(var(--primary))" 
+                      fill="hsl(var(--primary))" 
+                      fillOpacity={0.3}
+                      strokeWidth={2}
+                      name="revenue"
+                    >
+                      <LabelList 
+                        dataKey="revenue" 
+                        position="top" 
+                        formatter={(value: number) => value > 0 ? `${(value / 1000000).toFixed(0)}jt` : ''} 
+                        className="text-xs fill-foreground"
+                        offset={10}
+                      />
+                    </Area>
+                  </AreaChart>
+                </ResponsiveContainer>
+                <div className="flex justify-center gap-6 mt-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span>Max: {maxMonth?.name} (Rp {maxRevenue.toLocaleString('id-ID')})</span>
+                  </div>
+                  {minMonth && minRevenue > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <span>Min: {minMonth?.name} (Rp {minRevenue.toLocaleString('id-ID')})</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
