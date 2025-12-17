@@ -1129,6 +1129,8 @@ export default function HighticketData() {
               <TableHead>No HP</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Nama Program</TableHead>
+              <TableHead>Nama Standar</TableHead>
+              <TableHead>Suffix</TableHead>
               <TableHead>Harga</TableHead>
               <TableHead>Harga Bayar</TableHead>
               <TableHead>Status Payment</TableHead>
@@ -1143,11 +1145,11 @@ export default function HighticketData() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={isPreviewMode ? 15 : 16} className="text-center">Loading...</TableCell>
+                <TableCell colSpan={isPreviewMode ? 17 : 18} className="text-center">Loading...</TableCell>
               </TableRow>
             ) : filteredData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isPreviewMode ? 15 : 16} className="text-center">Tidak ada data</TableCell>
+                <TableCell colSpan={isPreviewMode ? 17 : 18} className="text-center">Tidak ada data</TableCell>
               </TableRow>
             ) : (
               filteredData?.map((row) => (
@@ -1174,6 +1176,14 @@ export default function HighticketData() {
                     </span>
                   </TableCell>
                   <TableCell>{row.nama_program}</TableCell>
+                  <TableCell>{row.nama_program_standar || '-'}</TableCell>
+                  <TableCell>
+                    {row.suffix_program ? (
+                      <span className="px-2 py-1 rounded text-xs bg-secondary/50 text-secondary-foreground">
+                        {row.suffix_program}
+                      </span>
+                    ) : '-'}
+                  </TableCell>
                   <TableCell>Rp {row.harga.toLocaleString('id-ID')}</TableCell>
                   <TableCell>
                     {row.harga_bayar ? `Rp ${row.harga_bayar.toLocaleString('id-ID')}` : '-'}
