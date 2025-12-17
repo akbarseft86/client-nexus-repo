@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useBranch } from "@/contexts/BranchContext";
 import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, CreditCard, Receipt, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import { 
@@ -475,6 +476,100 @@ export default function Dashboard() {
     },
   });
 
+  // Get Monthly Revenue for ALL BRANCHES (for monthly table display)
+  const { data: allBranchMonthlyData } = useQuery({
+    queryKey: ["dashboard-all-branch-monthly", selectedYear],
+    queryFn: async () => {
+      // Fetch Highticket data for all branches
+      const PAGE_SIZE = 1000;
+      let allHighticket: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("highticket_data")
+          .select("tanggal_transaksi, harga, asal_iklan")
+          .gte("tanggal_transaksi", yearStartDate)
+          .lte("tanggal_transaksi", yearEndDate)
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allHighticket = [...allHighticket, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // Fetch SH2M Revenue data for all branches
+      let allSH2M: any[] = [];
+      from = 0;
+      hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("sh2m_revenue")
+          .select("tahun, bulan, omset, asal_iklan")
+          .eq("tahun", selectedYear)
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allSH2M = [...allSH2M, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // Group Highticket by month and branch
+      const monthlyData: Record<number, { bekasi: number; jogja: number; sh2mBekasi: number; sh2mJogja: number }> = {};
+      for (let i = 0; i < 12; i++) {
+        monthlyData[i] = { bekasi: 0, jogja: 0, sh2mBekasi: 0, sh2mJogja: 0 };
+      }
+
+      allHighticket.forEach(tx => {
+        if (tx.tanggal_transaksi) {
+          const month = parseISO(tx.tanggal_transaksi).getMonth();
+          const isBekasi = tx.asal_iklan?.toLowerCase().includes('bekasi');
+          if (isBekasi) {
+            monthlyData[month].bekasi += tx.harga || 0;
+          } else {
+            monthlyData[month].jogja += tx.harga || 0;
+          }
+        }
+      });
+
+      // Group SH2M by month and branch
+      allSH2M.forEach(tx => {
+        const month = (tx.bulan || 1) - 1; // bulan uses 1-12
+        const isBekasi = tx.asal_iklan?.toLowerCase().includes('bekasi');
+        if (isBekasi) {
+          monthlyData[month].sh2mBekasi += tx.omset || 0;
+        } else {
+          monthlyData[month].sh2mJogja += tx.omset || 0;
+        }
+      });
+
+      return months.map(m => ({
+        bulan: m.label,
+        htBekasi: monthlyData[m.value].bekasi,
+        htJogja: monthlyData[m.value].jogja,
+        sh2mBekasi: monthlyData[m.value].sh2mBekasi,
+        sh2mJogja: monthlyData[m.value].sh2mJogja,
+        totalBekasi: monthlyData[m.value].bekasi + monthlyData[m.value].sh2mBekasi,
+        totalJogja: monthlyData[m.value].jogja + monthlyData[m.value].sh2mJogja,
+        grandTotal: monthlyData[m.value].bekasi + monthlyData[m.value].jogja + monthlyData[m.value].sh2mBekasi + monthlyData[m.value].sh2mJogja,
+      }));
+    },
+  });
+
   // Calculate YoY summary metrics
   const yoyMetrics = yoyComparisonData?.reduce((acc, month) => {
     acc.currentYearTotal += month[selectedYear] || 0;
@@ -694,7 +789,73 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* SH2M Revenue per CS Chart */}
+      {/* Monthly Revenue Table - All Branches */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Data Revenue Bulanan {selectedYear} - Semua Cabang
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="font-semibold">Bulan</TableHead>
+                  <TableHead className="text-right font-semibold">HT Bekasi</TableHead>
+                  <TableHead className="text-right font-semibold">HT Jogja</TableHead>
+                  <TableHead className="text-right font-semibold">SH2M Bekasi</TableHead>
+                  <TableHead className="text-right font-semibold">SH2M Jogja</TableHead>
+                  <TableHead className="text-right font-semibold bg-blue-500/10">Total Bekasi</TableHead>
+                  <TableHead className="text-right font-semibold bg-green-500/10">Total Jogja</TableHead>
+                  <TableHead className="text-right font-semibold bg-primary/10">Grand Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allBranchMonthlyData?.map((row, index) => (
+                  <TableRow key={index} className={index === selectedMonth ? "bg-primary/5" : ""}>
+                    <TableCell className="font-medium">{row.bulan}</TableCell>
+                    <TableCell className="text-right">Rp {row.htBekasi.toLocaleString('id-ID')}</TableCell>
+                    <TableCell className="text-right">Rp {row.htJogja.toLocaleString('id-ID')}</TableCell>
+                    <TableCell className="text-right">Rp {row.sh2mBekasi.toLocaleString('id-ID')}</TableCell>
+                    <TableCell className="text-right">Rp {row.sh2mJogja.toLocaleString('id-ID')}</TableCell>
+                    <TableCell className="text-right font-semibold bg-blue-500/5">Rp {row.totalBekasi.toLocaleString('id-ID')}</TableCell>
+                    <TableCell className="text-right font-semibold bg-green-500/5">Rp {row.totalJogja.toLocaleString('id-ID')}</TableCell>
+                    <TableCell className="text-right font-bold bg-primary/5">Rp {row.grandTotal.toLocaleString('id-ID')}</TableCell>
+                  </TableRow>
+                ))}
+                {/* Total Row */}
+                <TableRow className="border-t-2 font-bold bg-muted/50">
+                  <TableCell>TOTAL</TableCell>
+                  <TableCell className="text-right">
+                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.htBekasi, 0) || 0).toLocaleString('id-ID')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.htJogja, 0) || 0).toLocaleString('id-ID')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.sh2mBekasi, 0) || 0).toLocaleString('id-ID')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.sh2mJogja, 0) || 0).toLocaleString('id-ID')}
+                  </TableCell>
+                  <TableCell className="text-right bg-blue-500/10">
+                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.totalBekasi, 0) || 0).toLocaleString('id-ID')}
+                  </TableCell>
+                  <TableCell className="text-right bg-green-500/10">
+                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.totalJogja, 0) || 0).toLocaleString('id-ID')}
+                  </TableCell>
+                  <TableCell className="text-right bg-primary/10">
+                    Rp {(allBranchMonthlyData?.reduce((sum, r) => sum + r.grandTotal, 0) || 0).toLocaleString('id-ID')}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
       {sh2mMonthlyRevenue && Object.keys(sh2mMonthlyRevenue.byCs).length > 0 && (
         <Card className="border-teal-500/30">
           <CardHeader>
