@@ -249,6 +249,7 @@ export default function DataStaging() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [showOnlyInvalid, setShowOnlyInvalid] = useState(false);
+  const [selectedInvalidIds, setSelectedInvalidIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Column mapping states
@@ -732,17 +733,15 @@ export default function DataStaging() {
                     variant="outline" 
                     size="sm"
                     className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    disabled={selectedInvalidIds.size === 0}
                     onClick={() => {
-                      const invalidIds = stagingData
-                        .filter(row => !isRowValid(row.validation))
-                        .map(row => row.id);
-                      setStagingData(prev => prev.filter(row => !invalidIds.includes(row.id)));
-                      setShowOnlyInvalid(false);
-                      toast.success(`${invalidIds.length} data invalid berhasil dihapus`);
+                      setStagingData(prev => prev.filter(row => !selectedInvalidIds.has(row.id)));
+                      toast.success(`${selectedInvalidIds.size} data berhasil dihapus`);
+                      setSelectedInvalidIds(new Set());
                     }}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Hapus Invalid ({invalidCount})
+                    Hapus Terpilih ({selectedInvalidIds.size})
                   </Button>
                 )}
                 <Button 
@@ -761,6 +760,26 @@ export default function DataStaging() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {showOnlyInvalid && (
+                      <TableHead className="w-[40px]">
+                        <Checkbox
+                          checked={
+                            invalidCount > 0 && 
+                            stagingData.filter(row => !isRowValid(row.validation)).every(row => selectedInvalidIds.has(row.id))
+                          }
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              const allInvalidIds = stagingData
+                                .filter(row => !isRowValid(row.validation))
+                                .map(row => row.id);
+                              setSelectedInvalidIds(new Set(allInvalidIds));
+                            } else {
+                              setSelectedInvalidIds(new Set());
+                            }
+                          }}
+                        />
+                      </TableHead>
+                    )}
                     <TableHead className="w-[60px]">Status</TableHead>
                     <TableHead>Tanggal</TableHead>
                     <TableHead>Nama</TableHead>
@@ -783,6 +802,24 @@ export default function DataStaging() {
                         key={row.id} 
                         className={!isValid ? "bg-red-50 dark:bg-red-950/20" : ""}
                       >
+                        {showOnlyInvalid && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedInvalidIds.has(row.id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedInvalidIds(prev => {
+                                  const newSet = new Set(prev);
+                                  if (checked) {
+                                    newSet.add(row.id);
+                                  } else {
+                                    newSet.delete(row.id);
+                                  }
+                                  return newSet;
+                                });
+                              }}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell>
                           {isValid ? (
                             <Badge variant="default" className="bg-green-600">
