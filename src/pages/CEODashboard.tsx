@@ -698,6 +698,68 @@ export default function CEODashboard() {
     }));
   }, [highticketData, selectedYear]);
 
+  // Calculate all-time monthly revenue trend (all years) comparing Bekasi vs Jogja
+  const allTimeMonthlyTrend = useMemo(() => {
+    if (!highticketData) return [];
+
+    // Get min and max dates from data
+    const dates = highticketData
+      .map(d => new Date(d.tanggal_transaksi))
+      .filter(d => !isNaN(d.getTime()));
+    
+    if (dates.length === 0) return [];
+
+    const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+    const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+
+    // Generate all months between min and max
+    const months: { year: number; month: number }[] = [];
+    let current = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+    const end = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+
+    while (current <= end) {
+      months.push({ year: current.getFullYear(), month: current.getMonth() });
+      current.setMonth(current.getMonth() + 1);
+    }
+
+    // Initialize data structure
+    const monthlyData: Record<string, { bekasi: number; jogja: number }> = {};
+    months.forEach(m => {
+      const key = `${m.year}-${m.month}`;
+      monthlyData[key] = { bekasi: 0, jogja: 0 };
+    });
+
+    // Aggregate revenue by month and branch
+    highticketData.forEach(d => {
+      const date = new Date(d.tanggal_transaksi);
+      if (isNaN(date.getTime())) return;
+      
+      const key = `${date.getFullYear()}-${date.getMonth()}`;
+      const branch = d.asal_iklan || "";
+      const revenue = Number(d.harga || 0);
+
+      if (monthlyData[key]) {
+        if (branch.includes("Bekasi")) {
+          monthlyData[key].bekasi += revenue;
+        } else if (branch.includes("Jogja")) {
+          monthlyData[key].jogja += revenue;
+        }
+      }
+    });
+
+    // Convert to array format for chart
+    return months.map(m => {
+      const key = `${m.year}-${m.month}`;
+      const shortMonth = monthNames[m.month].substring(0, 3);
+      return {
+        label: `${shortMonth} ${m.year}`,
+        Bekasi: monthlyData[key].bekasi,
+        Jogja: monthlyData[key].jogja,
+        Total: monthlyData[key].bekasi + monthlyData[key].jogja,
+      };
+    });
+  }, [highticketData]);
+
   const getTrustBadge = (score: number) => {
     if (score >= 90) return <Badge className="bg-green-500 text-white"><CheckCircle className="h-3 w-3 mr-1" />{score.toFixed(0)}%</Badge>;
     if (score >= 70) return <Badge className="bg-yellow-500 text-white"><AlertCircle className="h-3 w-3 mr-1" />{score.toFixed(0)}%</Badge>;
@@ -1111,6 +1173,64 @@ export default function CEODashboard() {
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={{ r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* All-Time Monthly Revenue Trend - Bekasi vs Jogja */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-green-500" />
+            Perjalanan Revenue Bulanan - Semua Tahun
+          </CardTitle>
+          <CardDescription>Trend revenue bulanan Bekasi vs Jogja dari awal hingga sekarang</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[350px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={allTimeMonthlyTrend} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="label" 
+                  tick={{ fontSize: 10 }} 
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                  interval={Math.ceil(allTimeMonthlyTrend.length / 12)}
+                />
+                <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
+                <Tooltip 
+                  formatter={(value: number) => formatCurrency(value)}
+                  labelFormatter={(label) => `Periode: ${label}`}
+                />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="Bekasi" 
+                  stroke="#3b82f6" 
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="Jogja" 
+                  stroke="#22c55e" 
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="Total" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={false}
                 />
               </LineChart>
             </ResponsiveContainer>
