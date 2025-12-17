@@ -226,8 +226,8 @@ export default function SH2MRevenue() {
       const data = await selectedFile.arrayBuffer();
       setUploadProgress(10);
 
-      // Handle CSV with semicolon delimiter
-      const workbook = XLSX.read(data, { type: 'array', FS: ';' });
+      // Auto-detect CSV delimiter
+      const workbook = XLSX.read(data, { type: 'array' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
@@ -238,6 +238,24 @@ export default function SH2MRevenue() {
         setIsUploading(false);
         return;
       }
+
+      // Helper function to find column value with flexible matching
+      const findColumnValue = (row: any, possibleNames: string[]): string => {
+        for (const name of possibleNames) {
+          if (row[name] !== undefined && row[name] !== '') {
+            return String(row[name]).trim();
+          }
+        }
+        // Also check keys case-insensitively
+        const rowKeys = Object.keys(row);
+        for (const name of possibleNames) {
+          const foundKey = rowKeys.find(k => k.toLowerCase().trim() === name.toLowerCase().trim());
+          if (foundKey && row[foundKey] !== undefined && row[foundKey] !== '') {
+            return String(row[foundKey]).trim();
+          }
+        }
+        return '';
+      };
 
       const parsedData: Array<{
         tahun: number;
@@ -252,10 +270,14 @@ export default function SH2MRevenue() {
       for (let i = 0; i < totalRows; i++) {
         const row = jsonData[i] as any;
         
-        const tahun = parseInt(row.tahun || row.Tahun || row.TAHUN) || currentYear;
-        const bulan = parseMonth(row.bulan || row.Bulan || row.BULAN);
-        const omset = parseOmset(row.omset || row.Omset || row.OMSET || row["Jumlah Omset"] || row["jumlah omset"]);
-        const nama_cs = String(row.nama_cs || row["Nama CS"] || row["nama cs"] || row.NamaCS || row["Nama_CS"] || row["CS"] || "").trim();
+        const tahunStr = findColumnValue(row, ['Tahun', 'tahun', 'TAHUN']);
+        const bulanStr = findColumnValue(row, ['Bulan', 'bulan', 'BULAN']);
+        const omsetStr = findColumnValue(row, ['Omset', 'omset', 'OMSET', 'Jumlah Omset', 'jumlah omset']);
+        const nama_cs = findColumnValue(row, ['Nama CS', 'nama cs', 'NamaCS', 'nama_cs', 'Nama_CS', 'CS', 'cs']);
+
+        const tahun = parseInt(tahunStr) || currentYear;
+        const bulan = parseMonth(bulanStr);
+        const omset = parseOmset(omsetStr);
 
         if (nama_cs) {
           parsedData.push({
