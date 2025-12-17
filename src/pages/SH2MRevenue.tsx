@@ -201,7 +201,8 @@ export default function SH2MRevenue() {
   const parseOmset = (value: any): number => {
     if (typeof value === "number") return value;
     if (typeof value === "string") {
-      const cleaned = value.replace(/[^\d.-]/g, "");
+      // Remove "Rp", spaces, and dots (thousand separators in Indonesian format)
+      const cleaned = value.replace(/[Rp\s.]/gi, "").replace(/,/g, ".");
       return parseInt(cleaned) || 0;
     }
     return 0;
