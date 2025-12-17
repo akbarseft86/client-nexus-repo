@@ -11,6 +11,7 @@ import HighticketData from "@/pages/HighticketData";
 import CicilanData from "@/pages/CicilanData";
 import SearchClient from "@/pages/SearchClient";
 import SourceIklanCategories from "@/pages/SourceIklanCategories";
+import ProgramStandardization from "@/pages/ProgramStandardization";
 import LeadsEC from "@/pages/LeadsEC";
 import DataDuplikat from "@/pages/DataDuplikat";
 import DataTrust from "@/pages/DataTrust";
@@ -39,6 +40,7 @@ const App = () => (
                 <Route path="/cicilan" element={<CicilanData />} />
                 <Route path="/search" element={<SearchClient />} />
                 <Route path="/source-categories" element={<SourceIklanCategories />} />
+                <Route path="/program-standardization" element={<ProgramStandardization />} />
                 <Route path="/leads-ec" element={<LeadsEC />} />
                 <Route path="/data-duplikat" element={<DataDuplikat />} />
                 <Route path="/data-trust" element={<DataTrust />} />

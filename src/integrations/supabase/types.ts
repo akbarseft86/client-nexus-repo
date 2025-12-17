@@ -55,9 +55,11 @@ export type Database = {
           nama: string
           nama_ec: string
           nama_program: string
+          nama_program_standar: string | null
           nohp: string
           pelaksanaan_program: string | null
           status_payment: string
+          suffix_program: string | null
           tanggal_sh2m: string | null
           tanggal_transaksi: string
           updated_at: string
@@ -75,9 +77,11 @@ export type Database = {
           nama: string
           nama_ec: string
           nama_program: string
+          nama_program_standar?: string | null
           nohp: string
           pelaksanaan_program?: string | null
           status_payment?: string
+          suffix_program?: string | null
           tanggal_sh2m?: string | null
           tanggal_transaksi: string
           updated_at?: string
@@ -95,9 +99,11 @@ export type Database = {
           nama?: string
           nama_ec?: string
           nama_program?: string
+          nama_program_standar?: string | null
           nohp?: string
           pelaksanaan_program?: string | null
           status_payment?: string
+          suffix_program?: string | null
           tanggal_sh2m?: string | null
           tanggal_transaksi?: string
           updated_at?: string
@@ -141,6 +147,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      program_name_mappings: {
+        Row: {
+          created_at: string
+          id: string
+          nama_program_original: string
+          nama_standar: string | null
+          pelaksanaan: string | null
+          suffix: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nama_program_original: string
+          nama_standar?: string | null
+          pelaksanaan?: string | null
+          suffix?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nama_program_original?: string
+          nama_standar?: string | null
+          pelaksanaan?: string | null
+          suffix?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       sh2m_data: {
         Row: {

@@ -1,4 +1,4 @@
-import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle, Shield, Users, BarChart3, FolderInput } from "lucide-react";
+import { Database, FileText, Search, Tags, UserCheck, CreditCard, Menu, ChevronDown, Building2, LayoutDashboard, AlertTriangle, Shield, Users, BarChart3, FolderInput, FileType } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +30,7 @@ export default function Navigation() {
     { to: "/cicilan", icon: CreditCard, label: "Data Cicilan", hideInPreview: true },
     { to: "/search", icon: Search, label: "Pencarian Client", hideInPreview: false },
     { to: "/source-categories", icon: Tags, label: "Kategori Source Iklan", hideInPreview: true },
+    { to: "/program-standardization", icon: FileType, label: "Standarisasi Nama Program", hideInPreview: true },
     { to: "/leads-ec", icon: UserCheck, label: "Leads EC", hideInPreview: false },
     { to: "/clients", icon: Users, label: "Clients CRM", showOnlyInPreview: true },
     { to: "/data-duplikat", icon: AlertTriangle, label: "Data Duplikat", showOnlyInPreview: true },
