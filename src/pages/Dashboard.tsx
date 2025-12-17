@@ -122,9 +122,45 @@ export default function Dashboard() {
   
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-  // Get Total Revenue (All Time for this branch) - ALL transactions regardless of status
-  const { data: totalRevenue } = useQuery({
-    queryKey: ["dashboard-total-revenue", branchFilter],
+  // Get SH2M Revenue (All Time for this branch)
+  const { data: sh2mRevenueData } = useQuery({
+    queryKey: ["dashboard-sh2m-revenue", branchFilter],
+    queryFn: async () => {
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("sh2m_revenue")
+          .select("omset, tahun, bulan, nama_cs")
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (branchFilter) {
+          query = query.eq("asal_iklan", branchFilter);
+        }
+        
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      const totalOmset = allData.reduce((sum, d) => sum + (d.omset || 0), 0);
+      return { totalOmset, data: allData };
+    },
+  });
+
+  // Get Highticket Revenue (All Time for this branch) - ALL transactions regardless of status
+  const { data: highticketRevenue } = useQuery({
+    queryKey: ["dashboard-highticket-revenue", branchFilter],
     queryFn: async () => {
       const PAGE_SIZE = 1000;
       let allData: any[] = [];
@@ -154,6 +190,39 @@ export default function Dashboard() {
       }
       
       return allData.reduce((sum, d) => sum + (d.harga || 0), 0);
+    },
+  });
+
+  // Combined Total Revenue (Highticket + SH2M)
+  const totalRevenue = (highticketRevenue || 0) + (sh2mRevenueData?.totalOmset || 0);
+
+  // Get SH2M Revenue for selected month
+  const { data: sh2mMonthlyRevenue } = useQuery({
+    queryKey: ["dashboard-sh2m-monthly", branchFilter, selectedMonth, selectedYear],
+    queryFn: async () => {
+      let query = supabase
+        .from("sh2m_revenue")
+        .select("omset, nama_cs")
+        .eq("tahun", selectedYear)
+        .eq("bulan", selectedMonth + 1); // Database uses 1-12 for months
+      
+      if (branchFilter) {
+        query = query.eq("asal_iklan", branchFilter);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      const total = (data || []).reduce((sum, d) => sum + (d.omset || 0), 0);
+      
+      // Group by CS name
+      const byCs: Record<string, number> = {};
+      (data || []).forEach(d => {
+        const cs = d.nama_cs || 'Unknown';
+        byCs[cs] = (byCs[cs] || 0) + (d.omset || 0);
+      });
+      
+      return { total, byCs, count: data?.length || 0 };
     },
   });
 
@@ -505,7 +574,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">Rp {(totalRevenue || 0).toLocaleString('id-ID')}</div>
-            <p className="text-xs text-muted-foreground mt-1">Semua transaksi {selectedBranch}</p>
+            <p className="text-xs text-muted-foreground mt-1">Highticket + SH2M ({selectedBranch})</p>
           </CardContent>
         </Card>
         <Card>
@@ -552,6 +621,52 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* SH2M Revenue Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="border-teal-500/30 bg-gradient-to-br from-teal-500/5 to-transparent">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Revenue SH2M (All Time)
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-teal-500/10">
+              <TrendingUp className="h-4 w-4 text-teal-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-teal-600">Rp {(sh2mRevenueData?.totalOmset || 0).toLocaleString('id-ID')}</div>
+            <p className="text-xs text-muted-foreground mt-1">Total omset tim SH2M</p>
+          </CardContent>
+        </Card>
+        <Card className="border-cyan-500/30 bg-gradient-to-br from-cyan-500/5 to-transparent">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Revenue SH2M {months[selectedMonth].label}
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-cyan-500/10">
+              <Calendar className="h-4 w-4 text-cyan-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-cyan-600">Rp {(sh2mMonthlyRevenue?.total || 0).toLocaleString('id-ID')}</div>
+            <p className="text-xs text-muted-foreground mt-1">{sh2mMonthlyRevenue?.count || 0} data CS</p>
+          </CardContent>
+        </Card>
+        <Card className="border-indigo-500/30 bg-gradient-to-br from-indigo-500/5 to-transparent">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Revenue Highticket (All Time)
+            </CardTitle>
+            <div className="p-2 rounded-lg bg-indigo-500/10">
+              <DollarSign className="h-4 w-4 text-indigo-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-indigo-600">Rp {(highticketRevenue || 0).toLocaleString('id-ID')}</div>
+            <p className="text-xs text-muted-foreground mt-1">Total program highticket</p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* YoY Growth Card */}
       <Card className="bg-gradient-to-r from-primary/5 to-primary/10">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -579,12 +694,47 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
+      {/* SH2M Revenue per CS Chart */}
+      {sh2mMonthlyRevenue && Object.keys(sh2mMonthlyRevenue.byCs).length > 0 && (
+        <Card className="border-teal-500/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-teal-600">
+              <BarChart3 className="h-5 w-5" />
+              Revenue SH2M per CS - {months[selectedMonth].label} {selectedYear}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={Object.entries(sh2mMonthlyRevenue.byCs)
+                    .map(([name, revenue]) => ({ name, revenue }))
+                    .sort((a, b) => b.revenue - a.revenue)} 
+                  layout="vertical"
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis type="number" tickFormatter={formatCurrency} className="text-xs" />
+                  <YAxis type="category" dataKey="name" className="text-xs" width={100} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar 
+                    dataKey="revenue" 
+                    fill="hsl(172, 66%, 50%)" 
+                    radius={[0, 4, 4, 0]}
+                    name="revenue"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Monthly Revenue Chart */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            Monthly Revenue {selectedYear}
+            Monthly Revenue Highticket {selectedYear}
           </CardTitle>
         </CardHeader>
         <CardContent>
