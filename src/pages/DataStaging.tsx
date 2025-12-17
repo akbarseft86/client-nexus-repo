@@ -491,9 +491,8 @@ export default function DataStaging() {
       return;
     }
 
-    const validData = stagingData.filter(row => isRowValid(row.validation));
-    if (validData.length === 0) {
-      toast.error("Tidak ada data valid untuk di-assign");
+    if (stagingData.length === 0) {
+      toast.error("Tidak ada data untuk di-assign");
       return;
     }
 
@@ -501,7 +500,7 @@ export default function DataStaging() {
     try {
       const asalIklan = targetBranch === "bekasi" ? "SEFT Corp - Bekasi" : "SEFT Corp - Jogja";
       
-      const dataToInsert = validData.map(row => ({
+      const dataToInsert = stagingData.map(row => ({
         tanggal_transaksi: row.tanggal_transaksi,
         client_id: row.client_id,
         nama: row.nama,
@@ -524,11 +523,10 @@ export default function DataStaging() {
 
       if (error) throw error;
 
-      toast.success(`${validData.length} data berhasil dipindahkan ke ${targetBranch === "bekasi" ? "SEFT Bekasi" : "SEFT Jogja"}`);
+      toast.success(`${stagingData.length} data berhasil dipindahkan ke ${targetBranch === "bekasi" ? "SEFT Bekasi" : "SEFT Jogja"}`);
       
-      // Remove assigned data from staging
-      const assignedIds = new Set(validData.map(row => row.id));
-      setStagingData(prev => prev.filter(row => !assignedIds.has(row.id)));
+      // Clear all staging data after transfer
+      setStagingData([]);
       setTargetBranch("");
       setConfirmAssign(false);
     } catch (error) {
@@ -691,7 +689,7 @@ export default function DataStaging() {
               </Select>
               <Button 
                 onClick={() => setConfirmAssign(true)} 
-                disabled={validCount === 0 || !targetBranch}
+                disabled={stagingData.length === 0 || !targetBranch}
                 size="sm"
               >
                 <Check className="h-4 w-4 mr-1" />
@@ -1042,8 +1040,8 @@ export default function DataStaging() {
           <AlertDialogHeader>
             <AlertDialogTitle>Assign Data ke Cabang?</AlertDialogTitle>
             <AlertDialogDescription>
-              {validCount} data valid akan dipindahkan ke {targetBranch === "bekasi" ? "SEFT Bekasi" : "SEFT Jogja"}.
-              {invalidCount > 0 && ` ${invalidCount} data invalid akan tetap di staging.`}
+              {stagingData.length} data akan dipindahkan ke {targetBranch === "bekasi" ? "SEFT Bekasi" : "SEFT Jogja"}.
+              {invalidCount > 0 && ` (termasuk ${invalidCount} data yang perlu diperbaiki)`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
